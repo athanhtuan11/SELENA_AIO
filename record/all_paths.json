@@ -1,0 +1,25 @@
+{
+  "Honda|MY22|R14.3I0_ER_SW": {
+    "project": "Honda",
+    "variant": "MY22",
+    "release": "R14.3I0_ER_SW",
+    "repo": "D:\\honda_fr5plus_my22",
+    "toolbox": "D:/selena-toolbox_HONDA/selena-toolbox/selena-toolbox.py",
+    "json": "D:\\honda_fr5plus_my22\\honda_apl\\selena\\config\\runtime\\Common\\full_1R1V.json",
+    "scom": "D:\\05_All_In_One_Selena\\All_In_One_Selena\\SCOM\\MMC\\2N45E_MY26\\R2.0.2\\scom.xml",
+    "mf4": "D:/60_SELENA_WSpace/RVCRVHON-55824_MY22_CRV_R14.3_ER_I0/NA/Gen5_2025-07-30_15-55_0019.MF4",
+    "exe": "D:\\honda_fr5plus_my22\\build\\HONDA_MY22_SYSC_SERIES\\dc_tools\\selena\\core\\RelWithDebInfo\\selena.exe",
+    "build_selena": "D:\\honda_fr5plus_my22\\Build_Selena.bat",
+    "bct_out": "D:/mmc_ods_selena_mmc/BCT_build_config.bat",
+    "runtime": "D:\\05_All_In_One_Selena\\All_In_One_Selena\\Runtime\\Honda\\MY22\\R14.3I0_ER_SW\\runtime.xml",
+    "a2l_config": "\\\\abtvdfs1.de.bosch.com\\ismdfs\\ida\\abt\\SW_Build\\Radar\\SystemC\\Honda\\MY22\\R14.3\\I0_ER_SW",
+    "scom_actual": "D:\\60_SELENA_WSpace\\RVCRVHON-55824_MY22_CRV_R14.3_ER_I0\\scom_R14.3_I0_ER_SW.xml",
+    "systemtime": "D:\\05_All_In_One_Selena\\All_In_One_Selena\\systemtime\\Honda\\MY22\\R14.3I0_ER_SW\\systemtime.csv",
+    "sequence": "D:\\05_All_In_One_Selena\\All_In_One_Selena\\sequence\\Honda\\MY22\\R14.3I0_ER_SW\\sequence.csv",
+    "mempool": "D:\\05_All_In_One_Selena\\All_In_One_Selena\\mempool\\Honda\\MY22\\R14.3I0_ER_SW\\mempool.csv",
+    "adapter": "",
+    "run_order": "D:\\honda_fr5plus_my22\\honda_apl\\selena\\config\\runtime\\Common\\run_order.txt",
+    "selena_env": "seleenv",
+    "a2l_actual": ""
+  }
+}

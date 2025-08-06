@@ -1,0 +1,324 @@
+{
+  
+	"FCT": {
+		"g_FCT_preProc_preProc": {
+        "short_name": "PreProc",
+		"additional_ignores": [
+          ".*g_FCT_preProc_m_hmiHaptic_local.TChangeableMemPool.m_arrayPool.1.elem.FCWSensitivity.*",
+          ".*g_FCT_preProc_m_hmiHaptic_local.TChangeableMemPool.m_arrayPool.1.elem.TeenFCWSensitivity.*"
+        ]
+      },
+	  "g_FCT_mainProc_RunnableGroup": {
+        "config_runnables": [
+          "g_FCT_mainProc_mainProc",
+          "g_runnableFctMainProcHook"
+        ],
+        "eval_runnables": [
+          "g_FCT_mainProc_mainProc"
+        ],
+		"additional_ignores": [
+          "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_Apc._failureType5",
+          "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_Soc._failureType5",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isAccCCLsfFailure",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isFailureTypeCC2",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isSocD"
+        ]
+      },
+	  "g_FCT_RunnableGroup": {
+        "config_runnables": [
+          "g_FCT_mainProc_mainProc",
+          "g_FCT_preProc_preProc",
+          "g_FCT_postProc_postProc",
+          "g_runnableFctMainProcHook"
+        ],
+        "eval_runnables": [
+          "g_FCT_mainProc_mainProc",
+          "g_FCT_preProc_preProc",
+          "g_FCT_postProc_postProc"
+        ],
+		"additional_ignores": [
+          "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_Apc._failureType5",
+          "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_Soc._failureType5",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isAccCCLsfFailure",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isFailureTypeCC2",
+		  "_g_FCT_mainProc_mainProc._m_stateMachines._m_longStateMachine._m_longFcp._m_isSocD",
+		  ".*g_FCT_preProc_m_hmiHaptic_local.TChangeableMemPool.m_arrayPool.1.elem.FCWSensitivity.*",
+          ".*g_FCT_preProc_m_hmiHaptic_local.TChangeableMemPool.m_arrayPool.1.elem.TeenFCWSensitivity.*",
+		  "_g_FCT_postProc_postProc_m_netTx_Bosch_Radar_MRR_Status_local.TChangeableMemPool._._._m_arrayPool._1_._elem._m_netsigState_MRR_INTERNAL_SCS_STATUS",
+          "_g_FCT_postProc_postProc_m_netTx_Bosch_Radar_MRR_Status_local.TChangeableMemPool._._._m_arrayPool._1_._elem._m_netsigState_PLANT_SAFETY_MODE_STATUS"
+        ]
+      },
+	  "g_FCT_postProc_postProc": {
+        "short_name": "PostProc",
+		"additional_ignores": [
+          "_g_FCT_postProc_postProc_m_netTx_Bosch_Radar_MRR_Status_local.TChangeableMemPool._._._m_arrayPool._1_._elem._m_netsigState_MRR_INTERNAL_SCS_STATUS",
+          "_g_FCT_postProc_postProc_m_netTx_Bosch_Radar_MRR_Status_local.TChangeableMemPool._._._m_arrayPool._1_._elem._m_netsigState_PLANT_SAFETY_MODE_STATUS"
+        ]
+      },
+	  "g_ACF_ACF_ACF": {
+        "short_name": "FCT_ACF"
+      }
+	},
+    "PER": {
+		"PER_PME_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Per_HV_PerPmeRunnable_PerPmeRunnable",
+          "g_1R1V_Per_PerParameterRunnable_PerParameterRunnable"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Per_HV_PerPmeRunnable_PerPmeRunnable"
+        ]
+      },
+	  "PER_SppBDM_RunnableGroup": {
+        "config_runnables": [
+          "g_Ecd_PerSppBdmRunnable_PerSppBdmRunnable",
+          "g_1R1V_Bdm_PerBdmRunnable_PerBdmRunnable"
+        ],
+        "eval_runnables": [
+          "g_Ecd_PerSppBdmRunnable_PerSppBdmRunnable",
+          "g_1R1V_Bdm_PerBdmRunnable_PerBdmRunnable"
+        ],
+		"additional_ignores": [
+		  "_g_Ecd_PerSppBdmRunnable_PerSppBdmRunnable_m_bdm2NvmMessage_out_local"
+        ]
+      },
+	  "g_1R1V_InSpp_SppVLanRunnable_SppVLanRunnable": {
+        "short_name": "PerVLanRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerSpdRunnable_PerSpdRunnable": {
+        "short_name": "PerSpdRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerDepRunnable_PerDepRunnable": {
+		"config_runnables": [
+          "g_1R1V_Per_EnvModel_PerDepRunnable_PerDepRunnable",
+          "g_1R1V_Per_PerParameterRunnable_PerParameterRunnable"
+        ],
+		"eval_runnables": [
+          "g_1R1V_Per_EnvModel_PerDepRunnable_PerDepRunnable"
+        ],
+        "short_name": "PerDepRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerSepRunnable_PerSepRunnable": {
+        "short_name": "PerSepRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerRipRunnable_PerRipRunnable": {
+        "short_name": "PerRipRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerRepRunnable_PerRepRunnable": {
+        "short_name": "PerRepRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerEimTprRunnable_PerEimTprRunnable": {
+        "short_name": "PerEimTprRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerEimSerRunnable_PerEimSerRunnable": {
+        "short_name": "PerEimSerRunnable"
+      },
+      "g_1R1V_Per_EnvModel_PerEimRerRunnable_PerEimRerRunnable": {
+        "short_name": "PerEimRerRunnable"
+      },
+	  "g_1R1V_Cal_MalRunnable_MalRunnable": {
+        "short_name": "PerMalRunnable_Fw"
+      },
+      "g_1R1V_InSpp_PerSppVObjPolarRunnable_1R1VFw_Per_PerSppVObjPolarRunnable": {
+        "short_name": "SppVObjPolarRunnable_Fw"
+      },
+      "g_1R1V_InSpp_PerSppRLocRunnable_PerSppRLocRunnable": {
+        "short_name": "PerSppRLocRunnable_Fw",
+        "selena_dummy": "core0_t10",
+		"comparer_type": "comparer_sig_manipulation",
+		"signal_manipulation": {
+          "_g_1R1V_InSpp_PerSppRLocRunnable_PerSppRLocRunnable_m_radarSensorPropertiesPort_out_local.TChangeableMemPool._._._m_arrayPool._0_._elem._m_fieldOfView._m_sensState._FieldOfView_st.*phiViewAry._.*_._m_value": {
+            "cast_to_type": "int16",
+            "comment": "cast angle values to signed"
+          },
+          "_g_1R1V_InSpp_PerSppRLocRunnable_PerSppRLocRunnable_m_radarSensorPropertiesPort_out_local.TChangeableMemPool._._._m_arrayPool._0_._elem._m_fieldOfView._m_sensState._Misalignment_st._phiMalAng._m_value": {
+            "cast_to_type": "int16",
+            "comment": "cast angle values to signed"
+          },
+		  "_g_1R1V_InSpp_PerSppRLocRunnable_PerSppRLocRunnable_m_radarSensorPropertiesPort_out_local.TChangeableMemPool._._._m_arrayPool._0_._elem._m_fieldOfView._m_sensState._Misalignment_st._phiMalAngEme._m_value": {
+            "cast_to_type": "int16",
+            "comment": "cast angle values to signed"
+          },
+		  "_g_1R1V_InSpp_PerSppRLocRunnable_PerSppRLocRunnable_m_radarSensorPropertiesPort_out_local.TChangeableMemPool._._._m_arrayPool._0_._elem._m_fieldOfView._m_sensState._Misalignment_st._thetaMalAng._m_value": {
+            "cast_to_type": "int16",
+            "comment": "cast angle values to signed"
+          }
+        }
+      },
+      "g_copy_c0_to_c1_Runnable_copy_c0_to_c1": {
+        "short_name": "PerSppCopy_APl"
+      },
+	  "g_PerEnv_PerSppLvtRunnable_PerSppLvtRunnable": {
+        "short_name": "PerSppLvt_APl"
+      },
+	   "g_PerEnv_RunnableSppVid_RunnableSppVid": {
+        "short_name": "PerSppVid_Apl"
+      },
+	   "g_PerEnv_VideoLane_Runnable_VideoLane_Runnable": {
+        "short_name": "PerVideoLane_Apl"
+      },
+	   "g_PerHv_per_sppHVM_Runnable_1R1VApl_Per_per_sppHVM_Runnable": {
+        "short_name": "PerSppHvm_Apl"
+      },
+	   "g_Ecd_per_spp_scp_Runnable_1R1VApl_Per_per_spp_scp_Runnable": {
+        "short_name": "PerSppScp_APl"
+      },
+	  "g_PerHv_PerSppDdeRunnable_PerSppDdeRunnable": {
+        "short_name": "PerSppDde_APl"
+      },
+	   "g_PerEnv_PerSppMalRunnable_PerSppMalRunnable": {
+        "short_name": "PerSppMal_APl",
+		"additional_ignores": [
+          "_g_PerEnv_PerSppMalRunnable_PerSppMalRunnable_m_did858NvmMessage_out_local",
+          "_g_PerEnv_PerSppMalRunnable_PerSppMalRunnable_m_mal2NvmMessage_out_local"
+        ]
+      }
+    },
+    "SIT": {
+      "g_1R1V_Sit_Bc_RunnableEcl_RunnableEcl": {
+        "short_name": "SitEcl"
+      },
+      "g_1R1V_Sit_Bc_RunnableSsl_RunnableSsl": {
+        "short_name": "SitSsl"
+      },
+	  "g_1R1V_Sit_Bc_RunnableEtl_RunnableEtl": {
+        "short_name": "SitETL"
+      },
+      "g_1R1V_Sit_Bc_RunnableOtl_RunnableOtl": {
+        "short_name": "SitOtl"
+      },
+	  "SIT_LmfAndOlr_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bc_RunnableLmfAndOlr_RunnableLmfAndOlr",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bc_RunnableLmfAndOlr_RunnableLmfAndOlr"
+        ]
+      },
+      "g_1R1V_Sit_Bc_RunnableDmi_RunnableDmi": {
+        "short_name": "SitDmi"
+      },
+	  "SIT_Obe_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bc_RunnableLmfAndOlr_RunnableLmfAndOlr",
+          "g_1R1V_Sit_Bc_RunnableObe_RunnableObe"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bc_RunnableObe_RunnableObe"
+        ]
+      },
+      "g_1R1V_Sit_Bs_RunnableBehaviorStrategyFM_RunnableBehaviorStrategyFM": {
+        "short_name": "SitBehavioutStretegy"
+      },
+	  "SIT_BehaviorStrategyTIPL_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableBehaviorStrategyTIPL_RunnableBehaviorStrategyTIPL",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableBehaviorStrategyTIPL_RunnableBehaviorStrategyTIPL"
+        ]
+      },
+	  "SIT_BehaviorStrategyImba_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableBehaviorStrategyImba_RunnableBehaviorStrategyImba",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableBehaviorStrategyImba_RunnableBehaviorStrategyImba"
+        ]
+      },
+	  "SIT_FollowPrecedingObject_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableImbaFollowPrecedingObject_RunnableImbaFollowPrecedingObject",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableImbaFollowPrecedingObject_RunnableImbaFollowPrecedingObject"
+        ]
+      },
+	  "SIT_TiplLaneChangeAssisting_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplLaneChangeAssisting_RunnableTiplLaneChangeAssisting",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplLaneChangeAssisting_RunnableTiplLaneChangeAssisting"
+        ]
+      },
+	  "SIT_TIPL_LaneKeepAssist_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplLaneKeepingAssisting_RunnableTiplLaneKeepingAssisting",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplLaneKeepingAssisting_RunnableTiplLaneKeepingAssisting"
+        ]
+      },
+	  "SIT_TiplForwardCollisionAvoidance_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplForwardCollisionAvoidance_RunnableTiplForwardCollisionAvoidance",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTiplForwardCollisionAvoidance_RunnableTiplForwardCollisionAvoidance"
+        ]
+      },
+	  "g_1R1V_Sit_Bs_RunnableTiplTurnCoDriver_RunnableTiplTurnCoDriver": {
+        "short_name": "SitTiplTurnCoDriver"
+      },
+	  "SIT_CfmFrontTrafficCoDriverLon_RunnableGroup": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableCfmFrontTrafficCoDriverLon_RunnableCfmFrontTrafficCoDriverLon",
+          "g_FCT_mainProc_mainProc"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableCfmFrontTrafficCoDriverLon_RunnableCfmFrontTrafficCoDriverLon"
+        ]
+      },
+	  "g_1R1V_Sit_Bc_RunnableBehaviorConsistencyLead_RunnableBehaviorConsistencyLead": {
+        "short_name": "SitBehaviorConsistencyLead"
+      },
+	  "g_1R1V_Sit_Bs_RunnableBehaviorStrategyLead_RunnableBehaviorStrategyLead": {
+        "short_name": "SitBehaviorStrategyLead"
+      },
+      "g_1R1V_Sit_Bc_RunnableTrafficContext_RunnableTrafficContext": {
+        "short_name": "SitTrafficContext"
+      },
+	  "SIT_RunnableTixlIntersectionCoDriverLon_Group": {
+        "config_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTixlIntersectionCoDriverLon_RunnableTixlIntersectionCoDriverLon",
+          "g_FCT_mainProc_mainProc",
+          "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution"
+        ],
+        "eval_runnables": [
+          "g_1R1V_Sit_Bs_RunnableTixlIntersectionCoDriverLon_RunnableTixlIntersectionCoDriverLon"
+        ]
+      },
+      "g_1R1V_Sit_Bs_RunnableBehaviorStrategyTixl_RunnableBehaviorStrategyTixl": {
+        "short_name": "SitBehaviorStrategyTixl"
+      },
+      "g_Sit_SppHmiInput_CSppHmiInput": {
+        "short_name": "StSppHmiInput_Apl"
+      },
+      "g_Sit_ParameterInput_ParameterInputRunnable": {
+        "short_name": "SitParamInput_Apl"
+      },
+	    "g_1R1V_Sit_TimbaRunnable_TimbaRunnable": {
+        "short_name": "SitTimba_Fw"
+      }
+    },
+	"RPM": {
+      "g_1R1V_Rpm_RpmExecution_RpmExecution_RpmExecution": {
+        "short_name": "Rpm_Execution"
+      }
+	}
+  
+}
