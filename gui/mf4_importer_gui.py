@@ -10,6 +10,7 @@ import re
 import zipfile
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import xml.etree.ElementTree as ET
 
 class MF4ImporterGUI:
     def __init__(self, root):
@@ -271,6 +272,9 @@ class MF4ImporterGUI:
         runtime_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
         self.gen_runtime_button = tk.Button(runtime_frame, text="Gen Runtime", command=self.run_gen_runtime)
         self.gen_runtime_button.pack(side=tk.LEFT, padx=5)
+        # Thêm nút OLD IMPORT sau nút GEN RUNTIME
+        self.old_import_button = tk.Button(runtime_frame, text="OLD IMPORT", command=self.old_import_action)
+        self.old_import_button.pack(side=tk.LEFT, padx=5)
         self.open_runtime_button = tk.Button(runtime_frame, text="Open Runtime", command=self.open_runtime_file)
         self.open_runtime_button.pack(side=tk.LEFT)
         self.runtime_var = tk.StringVar()
@@ -911,7 +915,7 @@ class MF4ImporterGUI:
             command = (
                 f"{python_path} -u {toolbox_path} runtime create++ {scom_path} -c {json_path} "
                 f"--run {run_order_path} "
-                f"-s RadarFC "
+                f"-s {source_var_path} "
                 f"-mb -mp {mempool_path} "
                 f"-sn {sequence_path} "
                 f"-st {systemtime_path} "
@@ -939,6 +943,28 @@ class MF4ImporterGUI:
                     self.root.after(0, lambda: self.append_info_text("[PROGRESS] Đã hoàn thành Gen Runtime!\n"))
                     self.root.after(0, lambda: self.runtime_var.set(runtime_output))
                     self.root.after(0, lambda: messagebox.showinfo("Gen Runtime", "Runtime generation completed successfully."))
+                    # Thay thế <plugins> trong runtime.xml
+                    try:
+                        with open(runtime_output, 'r', encoding='utf-8') as f:
+                            xml_text = f.read()
+                        plugins_new = '''<plugins>
+    <recorder id="matrecorder" plugin="DataRecorderPluginMAT" />
+    <plugin name="pl1r1v_player_module_mdf">
+      <player id="mdfplayer" plugin="PL1R1VDataPlayerPluginMDF" default="1" />
+    </plugin>
+    <plugin name="pl1r1v_recorder_module_mdf">
+      <recorder id="mdfrecorder" plugin="PL1R1VDataRecorderPluginMDF" />
+    </plugin>
+    <plugin name="pl1r1v_scheduler_module_mdf">
+      <scheduler id="mdfscheduler" plugin="PL1R1VSchedulerPluginMDF" />
+    </plugin>
+</plugins>'''
+                        xml_text = re.sub(r'<plugins[\s\S]*?</plugins>', plugins_new, xml_text, flags=re.MULTILINE)
+                        with open(runtime_output, 'w', encoding='utf-8') as f:
+                            f.write(xml_text)
+                        self.root.after(0, lambda: self.append_info_text("[INFO] Đã thay thế <plugins> trong runtime.xml!\n"))
+                    except Exception as e:
+                        self.root.after(0, lambda: self.append_info_text(f"[ERROR] Không thể thay thế <plugins>: {e}\n"))
                 else:
                     self.root.after(0, lambda: self.append_info_text("[PROGRESS] Gen Runtime thất bại!\n"))
                     self.root.after(0, lambda: messagebox.showerror("Gen Runtime", "Runtime generation failed."))
@@ -1140,7 +1166,6 @@ class MF4ImporterGUI:
             if not project or not variant or not release or not source:
                 self.root.after(0, lambda: messagebox.showerror("Lỗi", "Không thể phân tích được project/variant/release từ đường dẫn hoặc source!"))
                 self.append_info_text("[A2L] Không thể phân tích project/variant/release từ đường dẫn hoặc source.\n")
-                return
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             a2l_folder = os.path.join(project_root, "A2L", project, variant, release)
             os.makedirs(a2l_folder, exist_ok=True)
@@ -1313,6 +1338,10 @@ class MF4ImporterGUI:
 
     def save_all_paths(self, *args):
         # Lưu tất cả các biến path_vars vào all_paths.json, bao gồm run_order và selena_env
+       
+       
+
+       
         record_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record")
         all_paths_file = os.path.join(record_dir, "all_paths.json")
         project = self.project_var.get().strip()
@@ -1354,7 +1383,7 @@ class MF4ImporterGUI:
         if not keys:
             messagebox.showinfo("Load All Paths", "Không có path nào để load!")
             return
-        # Hiển thị dialog chọn/xoá/duplicate
+        # Hiển thị dialog chọn/xoà/duplicate
         top = tk.Toplevel(self.root)
         top.title("Quản lý All Paths")
         tk.Label(top, text="Chọn các path muốn thao tác:").pack(padx=10, pady=5)
@@ -1489,43 +1518,44 @@ class MF4ImporterGUI:
 
             # Lấy các giá trị động từ GUI hoặc build từ project/variant/release
             runtime_path = os.path.join(Justin_path, "runtimes").replace("\\", "/")
+            #path to json 
+            json_path = os.path.join(self.json_var.get().strip()).replace("\\", "/")
             #path to selena.exe
             exe_path = os.path.normpath(self.selena_exe_var.get().strip()).replace("\\", "/")
             #path to repo 
             repo_path = os.path.normpath(self.repo_path_var.get().strip()).replace("\\", "/")
+            #path to mf4 file
+            mf4_path = self.mf4_var.get().strip().replace("\\", "/") if self.mf4_var.get().strip() else ""
+            mf4_name = os.path.splitext(os.path.basename(mf4_path))[0] if mf4_path else "AEB"
             #path to data
-            data_path = os.path.normpath(os.path.dirname(self.systemtime_var.get().strip())).replace("\\", "/")
+            data_path = os.path.normpath(os.path.dirname(mf4_path)).replace("\\", "/")
+            data_path = data_path + "/"
+
             # testplan_creation
             testplan_creation = {
-                "selena_path": os.path.normpath(os.path.dirname(exe_path)).replace("\\", "/") if exe_path else "",
-                "justin_path": os.path.join(repo_path, "ip_dc/dc_tools/justin").replace("\\", "/"),
-                "justin_config_path": os.path.join(Justin_path, "justin_configs").replace("\\", "/"),
-                "report_path": os.path.join(Justin_path, "reports").replace("\\", "/"),
-                "testplan_path": os.path.join(Justin_path, "testplan_path").replace("\\", "/"),
-                "selena_args": "--enable-multibuffer-border --enable-doorkeeper",
-                "tolerance": 1e-5,
-                "comparer_type": "comparer_jenkins",
+                "comparer_type": "comparer_jenkins",   
                 "ignore_signals": [
                     ".*m_sequenceNumber.*",
                     ".*m_referenceCounter.*",
                     ".*m_systemTime.*",
                     ".*freeHeadOffset.*"
-                ]
+                ],
+                "justin_config_path": os.path.join(Justin_path, "justin_configs").replace("\\", "/"),
+                "justin_path": os.path.join(repo_path, "ip_dc/dc_tools/justin").replace("\\", "/"),
+                "report_path": os.path.join(Justin_path, "reports").replace("\\", "/"),
+                "selena_args": "--enable-multibuffer-border --enable-doorkeeper",
+                "selena_path": os.path.normpath(os.path.dirname(exe_path)).replace("\\", "/") if exe_path else "",
+                "testplan_path": os.path.join(Justin_path, "testplan_path").replace("\\", "/"),
+                "tolerance": 1e-5                           
             }
             # runtime_creation
             runtime_creation = {
-                "scom_xml_path": self.json_var.get().strip().replace("\\", "/") if self.json_var.get().strip() else "",
+                "config_path": os.path.join(json_path).replace("\\", "/"),
                 "data_path": os.path.join(data_path).replace("\\", "/"),
-                "config_path": os.path.join(runtime_path, "runtime_configs").replace("\\", "/"),
-                "use_multibuffer": True,
-                "use_systemtime": True,
-                "player": [
-                    {
-                        "id": "01",
+                "player":{
                         "name": "pl1r1v_player_module_mdf",
                         "plugin": "PL1R1VDataPlayerPluginMDF"
-                    }
-                ],
+                    },
                 "recorder": {
                     "name": "pl1r1v_recorder_module_mdf",
                     "plugin": "PL1R1VDataRecorderPluginMDF"
@@ -1538,9 +1568,7 @@ class MF4ImporterGUI:
                 "use_multibuffer": True,
                 "use_systemtime": True
             }
-            #path to mf4 file
-            mf4_path = self.mf4_var.get().strip().replace("\\", "/") if self.mf4_var.get().strip() else ""
-            mf4_name = os.path.splitext(os.path.basename(mf4_path))[0] if mf4_path else "AEB"
+
             measurements_creation = {
                 mf4_name: {
                     "file": mf4_path
@@ -1548,11 +1576,11 @@ class MF4ImporterGUI:
             }
             # Build template
             template = {
-                "runtime_path": runtime_path,
-                "testplan_creation": testplan_creation,
-                "runtime_creation": runtime_creation,
                 "measurements": measurements_creation,
-                "runnables": runnables_data
+                "runnables": runnables_data,
+                "runtime_creation": runtime_creation,
+                "runtime_path": runtime_path,
+                "testplan_creation": testplan_creation
             }
             with open(out_file, "w", encoding="utf-8") as f:
                 json.dump(template, f, ensure_ascii=False, indent=2)
@@ -1675,6 +1703,55 @@ class MF4ImporterGUI:
     def open_split_mf4_dialog(self):
         self.split_mf4_file()
 
+    def old_import_action(self):
+        from tkinter import messagebox
+        runtime_path = self.runtime_var.get().strip()
+        if not runtime_path or not os.path.isfile(runtime_path):
+            messagebox.showerror("OLD IMPORT", "Không tìm thấy file runtime.xml!")
+            return
+        try:
+            tree = ET.parse(runtime_path)
+            root = tree.getroot()
+            connections = root.findall('.//connection')
+            count = 0
+            debug_log = []
+            for conn in connections:
+                outport = conn.find('outport')
+                inport = conn.find('inport')
+                if outport is None or inport is None:
+                    debug_log.append(f"[SKIP] Connection missing outport/inport: {ET.tostring(conn, encoding='unicode')}")
+                    continue
+                # Bỏ qua nếu inport có newdatacheck
+                if inport.get('newdatacheck') is not None:
+                    debug_log.append(f"[SKIP] inport has newdatacheck: {ET.tostring(inport, encoding='unicode')}")
+                    continue
+                # Bỏ qua nếu outport có doorkeeper modus="sequence_number"
+                doorkeeper = outport.find('doorkeeper')
+                if doorkeeper is not None and doorkeeper.get('modus') == 'sequence_number':
+                    debug_log.append(f"[SKIP] Outport doorkeeper sequence_number: {ET.tostring(outport, encoding='unicode')}")
+                    continue
+                # Bỏ qua nếu connection có multibuffer sequencenumbersignal
+                multibuffer = conn.find('multibuffer')
+                if multibuffer is not None and multibuffer.get('sequencenumbersignal'):
+                    debug_log.append(f"[SKIP] Connection has multibuffer sequencenumbersignal: {ET.tostring(multibuffer, encoding='unicode')}")
+                    continue
+                outport_runnable = outport.get('runnable')
+                inport_runnable = inport.get('runnable')
+                if outport_runnable == 'DataPlayer' and inport_runnable != 'DataRecorder':
+                    inport.attrib = {**inport.attrib, 'old': '1'}
+                    count += 1
+                    debug_log.append(f"[SET OLD] inport runnable={inport_runnable}, outport runnable=DataPlayer, port={outport.get('port')}")
+                else:
+                    debug_log.append(f"[SKIP] inport runnable={inport_runnable}, outport runnable={outport_runnable}")
+            tree.write(runtime_path, encoding='utf-8', xml_declaration=True)
+            # Ghi log ra file để debug
+            log_path = runtime_path + '.oldimport.log.txt'
+            with open(log_path, 'w', encoding='utf-8') as f:
+                for line in debug_log:
+                    f.write(line + '\n')
+            messagebox.showinfo("OLD IMPORT", f"Đã cập nhật runtime.xml: thêm old=\"1\" cho {count} inport (bỏ qua inport newdatacheck, doorkeeper sequence_number, multibuffer sequencenumbersignal). Log: {log_path}")
+        except Exception as e:
+            messagebox.showerror("OLD IMPORT", f"Lỗi khi xử lý runtime.xml: {e}")
 
 def run_gui():
     root = tk.Tk()
