@@ -55,37 +55,53 @@ class MF4ImporterGUI:
                                      sashwidth=5, sashrelief=tk.RAISED)
         paned_window.pack(fill=tk.BOTH, expand=True)
         
-        # Left panel with scrollable canvas for main configuration
-        left_canvas_frame = tk.Frame(paned_window, bg='#f0f0f0', borderwidth=0, highlightthickness=0)
-        paned_window.add(left_canvas_frame, minsize=400, stretch="always")
-
-        # Create canvas and scrollbar for left panel
-        left_canvas = tk.Canvas(left_canvas_frame, bg='#f0f0f0', highlightthickness=0, borderwidth=0)
-        left_scrollbar = tk.Scrollbar(left_canvas_frame, orient="vertical", command=left_canvas.yview)
-        left_scrollable_frame = tk.Frame(left_canvas, bg='#f0f0f0', borderwidth=0, highlightthickness=0)
-
-        left_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: left_canvas.configure(scrollregion=left_canvas.bbox("all"))
-        )
-
-        left_canvas.create_window((0, 0), window=left_scrollable_frame, anchor="nw")
-        left_canvas.configure(yscrollcommand=left_scrollbar.set)
-
-        left_canvas.pack(side="left", fill="both", expand=True, padx=0, pady=0)
-        left_scrollbar.pack(side="right", fill="y", padx=0, pady=0)
-
-        # Bind mousewheel to canvas
-        def _on_mousewheel(event):
-            left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        left_canvas.bind("<MouseWheel>", _on_mousewheel)
-
-        # Set reference for left_frame to scrollable frame
-        left_frame = left_scrollable_frame
-        
+        # Left panel for main configuration (no scrollbar/canvas)
+        left_frame = tk.Frame(paned_window, bg='#f0f0f0', borderwidth=0, highlightthickness=0)
+        paned_window.add(left_frame, minsize=400, stretch="always")
+            
         # Right panel for actions and terminal (equal size with left panel)
         right_frame = tk.Frame(paned_window, bg='#f0f0f0')
         paned_window.add(right_frame, minsize=400, stretch="always")
+
+        # =============================================================================
+        # RUNTIME GENERATION & FILES (moved to top of right panel)
+        # =============================================================================
+        runtime_frame = tk.LabelFrame(right_frame, text="Runtime Generation & Files", bg='#f0f0f0', pady=5)
+        runtime_frame.pack(padx=10, pady=(0, 5), fill=tk.X)
+
+        # SOURCE selection
+        source_row = tk.Frame(runtime_frame, bg='#f0f0f0')
+        source_row.pack(padx=10, pady=2, fill=tk.X)
+        tk.Label(source_row, text="SOURCE:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.source_var = tk.StringVar(value="RadarFC")
+        self.source_options = ["RadarFC", "RadarFL", "RadarFR", "RadarRL", "RadarRR"]
+        self.source_menu = tk.OptionMenu(source_row, self.source_var, *self.source_options)
+        self.source_menu.config(width=8)
+        self.source_menu.pack(side=tk.LEFT, padx=(0, 5))
+        # Khi đổi SOURCE thì tự động lấy delivery folder nếu có
+        self.source_var.trace_add("write", lambda *args: self.root.after_idle(self.update_a2l_config_by_project()))
+
+        # Runtime generation and selection
+        runtime_row = tk.Frame(runtime_frame, bg='#f0f0f0')
+        runtime_row.pack(padx=10, pady=2, fill=tk.X)
+        tk.Label(runtime_row, text="Runtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+
+        # Runtime action buttons
+        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=8, command=self.run_gen_runtime, bg='#4CAF50', fg='white')
+        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+
+        self.old_import_button = tk.Button(runtime_row, text="Import", width=6, command=self.old_import_action)
+        self.old_import_button.pack(side=tk.LEFT, padx=(0, 2))
+
+        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=6, command=self.choose_runtime_file)
+        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+
+        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=6, command=self.open_runtime_file)
+        self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.runtime_var = tk.StringVar()
+        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var)
+        self.runtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # ===== RIGHT PANEL - ACTIONS =====
         actions_section = tk.LabelFrame(right_frame, text="Actions & Controls", font=("Arial", 11, "bold"), 
@@ -484,45 +500,7 @@ class MF4ImporterGUI:
         self.mempool_entry = tk.Entry(mempool_row, textvariable=self.mempool_var)
         self.mempool_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
 
-        # =============================================================================
-        # RUNTIME GENERATION & FILES
-        # =============================================================================
-        runtime_frame = tk.LabelFrame(left_frame, text="Runtime Generation & Files", bg='#f0f0f0', pady=5)
-        runtime_frame.pack(padx=10, pady=(0, 5), fill=tk.X)
-        
-        # SOURCE selection
-        source_row = tk.Frame(runtime_frame, bg='#f0f0f0')
-        source_row.pack(padx=10, pady=2, fill=tk.X)
-        tk.Label(source_row, text="SOURCE:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
-        self.source_var = tk.StringVar(value="RadarFC")
-        self.source_options = ["RadarFC", "RadarFL", "RadarFR", "RadarRL", "RadarRR"]
-        self.source_menu = tk.OptionMenu(source_row, self.source_var, *self.source_options)
-        self.source_menu.config(width=8)
-        self.source_menu.pack(side=tk.LEFT, padx=(0, 5))
-        # Khi đổi SOURCE thì tự động lấy delivery folder nếu có
-        self.source_var.trace_add("write", lambda *args: self.root.after_idle(self.update_a2l_config_by_project()))
-        
-        # Runtime generation and selection
-        runtime_row = tk.Frame(runtime_frame, bg='#f0f0f0')
-        runtime_row.pack(padx=10, pady=2, fill=tk.X)
-        tk.Label(runtime_row, text="Runtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
-        
-        # Runtime action buttons
-        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=8, command=self.run_gen_runtime, bg='#4CAF50', fg='white')
-        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
-        
-        self.old_import_button = tk.Button(runtime_row, text="Import", width=6, command=self.old_import_action)
-        self.old_import_button.pack(side=tk.LEFT, padx=(0, 2))
-        
-        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=6, command=self.choose_runtime_file)
-        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
-        
-        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=6, command=self.open_runtime_file)
-        self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 5))
-        
-        self.runtime_var = tk.StringVar()
-        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var)
-        self.runtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+    # (block removed from left panel)
 
         # Initialize placeholder for BCT output entry
         self.bct_out_placeholder = "path to bct.bat file"
