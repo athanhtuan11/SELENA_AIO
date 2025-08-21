@@ -8,207 +8,435 @@ import subprocess
 import tempfile
 import re
 import zipfile
+from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import xml.etree.ElementTree as ET
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 class MF4ImporterGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("MF4 Importer Guild")
-        # Tạo layout chia 2 nửa: left_frame (thông tin), right_frame (trống cho mở rộng)
-        main_frame = tk.Frame(root)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        left_frame = tk.Frame(main_frame)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        right_frame = tk.Frame(main_frame, width=300)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        right_frame.pack_propagate(False)
-        # Thêm nút run_order và ô nhập vào hàng đầu tiên bên phải
-        run_order_frame = tk.Frame(right_frame)
-        run_order_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
+        self.root.title("SELENA AIO")
+        
+        # Set minimum window size and initial size for proper display
+        self.root.minsize(1000, 700)
+        self.root.geometry("1200x800")  # Set initial size
+        
+        # Configure root to be resizable
+        self.root.resizable(True, True)
+        
+        # Set icon for main window
+        try:
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record", "icon.png")
+            if os.path.exists(icon_path):
+                self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+        except Exception:
+            pass
+        
+        # Store icon reference for child windows
+        self.icon_photo = None
+        try:
+            icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record", "icon.png")
+            if os.path.exists(icon_path):
+                self.icon_photo = tk.PhotoImage(file=icon_path)
+        except Exception:
+            pass
+        
+        # ===== MAIN LAYOUT =====
+        main_frame = tk.Frame(root, bg='#f0f0f0')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Create PanedWindow for resizable panels
+        paned_window = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, bg='#f0f0f0', 
+                                     sashwidth=5, sashrelief=tk.RAISED)
+        paned_window.pack(fill=tk.BOTH, expand=True)
+        
+        # Left panel with scrollable canvas for main configuration
+        left_canvas_frame = tk.Frame(paned_window, bg='#f0f0f0', borderwidth=0, highlightthickness=0)
+        paned_window.add(left_canvas_frame, minsize=400, stretch="always")
+
+        # Create canvas and scrollbar for left panel
+        left_canvas = tk.Canvas(left_canvas_frame, bg='#f0f0f0', highlightthickness=0, borderwidth=0)
+        left_scrollbar = tk.Scrollbar(left_canvas_frame, orient="vertical", command=left_canvas.yview)
+        left_scrollable_frame = tk.Frame(left_canvas, bg='#f0f0f0', borderwidth=0, highlightthickness=0)
+
+        left_scrollable_frame.bind(
+            "<Configure>",
+            lambda e: left_canvas.configure(scrollregion=left_canvas.bbox("all"))
+        )
+
+        left_canvas.create_window((0, 0), window=left_scrollable_frame, anchor="nw")
+        left_canvas.configure(yscrollcommand=left_scrollbar.set)
+
+        left_canvas.pack(side="left", fill="both", expand=True, padx=0, pady=0)
+        left_scrollbar.pack(side="right", fill="y", padx=0, pady=0)
+
+        # Bind mousewheel to canvas
+        def _on_mousewheel(event):
+            left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        left_canvas.bind("<MouseWheel>", _on_mousewheel)
+
+        # Set reference for left_frame to scrollable frame
+        left_frame = left_scrollable_frame
+        
+        # Right panel for actions and terminal (equal size with left panel)
+        right_frame = tk.Frame(paned_window, bg='#f0f0f0')
+        paned_window.add(right_frame, minsize=400, stretch="always")
+        
+        # ===== RIGHT PANEL - ACTIONS =====
+        actions_section = tk.LabelFrame(right_frame, text="Actions & Controls", font=("Arial", 11, "bold"), 
+                                       padx=10, pady=10, bg='#f0f0f0')
+        actions_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Run Order
+        run_order_frame = tk.Frame(actions_section, bg='#f0f0f0')
+        run_order_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(run_order_frame, text="Run Order:", width=15, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.run_order_var = tk.StringVar()
-        self.run_order_button = tk.Button(run_order_frame, text="run_order", command=self.run_order_action)
-        self.run_order_button.pack(side=tk.LEFT, padx=5)
-        self.run_order_entry = tk.Entry(run_order_frame, textvariable=self.run_order_var, width=25)
-        self.run_order_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-
+        self.run_order_button = tk.Button(run_order_frame, text="Select", command=self.run_order_action, width=8)
+        self.run_order_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.run_order_entry = tk.Entry(run_order_frame, textvariable=self.run_order_var)
+        self.run_order_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # Thêm hàng mới: Adapter File bên phải (sau Run Simulation)
-        adapter_right_frame = tk.Frame(right_frame)
-        adapter_right_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        tk.Label(adapter_right_frame, text="Adapter File:").pack(side=tk.LEFT)
-        self.adapter_file_var = getattr(self, 'adapter_file_var', tk.StringVar())
-        self.adapter_file_entry_right = tk.Entry(adapter_right_frame, textvariable=self.adapter_file_var, width=25)
-        self.adapter_file_entry_right.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        self.open_adapter_file_button_right = tk.Button(adapter_right_frame, text="Chọn Adapter", command=self.open_adapter_file)
-        self.open_adapter_file_button_right.pack(side=tk.LEFT, padx=5)
-
-
-        # Thêm hàng mới: Nút Run Simulation bên phải
-        simulation_frame = tk.Frame(right_frame)
-        simulation_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.run_simulation_button = tk.Button(simulation_frame, text="Run Simulation", command=self.run_simulation_action)
-        self.run_simulation_button.pack(side=tk.LEFT, padx=5)
-
-        # Thêm hàng mới: GEN Runnable Level | Ô nhập
-        runnable_level_frame = tk.Frame(right_frame)
-        runnable_level_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.gen_runnable_level_button = tk.Button(runnable_level_frame, text="GEN Runnable Level", command=self.gen_runnable_level_template)
-        self.gen_runnable_level_button.pack(side=tk.LEFT, padx=5)
+        # Run Simulation - Make it prominent
+        simulation_frame = tk.Frame(actions_section, bg='#f0f0f0')
+        simulation_frame.pack(fill=tk.X, pady=(0, 8))
+        self.run_simulation_button = tk.Button(simulation_frame, text=">> Run Simulation", 
+                                             command=self.run_simulation_action, 
+                                             font=("Arial", 10, "bold"), bg='#4CAF50', fg='white', 
+                                             height=2)
+        self.run_simulation_button.pack(fill=tk.X)
+        
+        # Runnable Level
+        runnable_level_frame = tk.Frame(actions_section, bg='#f0f0f0')
+        runnable_level_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(runnable_level_frame, text="Runnable Level:", width=15, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.gen_runnable_level_button = tk.Button(runnable_level_frame, text="Generate", 
+                                                 command=self.gen_runnable_level_template, width=8)
+        self.gen_runnable_level_button.pack(side=tk.LEFT, padx=(5, 5))
         self.runnable_level_var = tk.StringVar()
-        self.runnable_level_entry = tk.Entry(runnable_level_frame, textvariable=self.runnable_level_var, width=25)
-        self.runnable_level_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-
-        Gen_testplan_frame = tk.Frame(right_frame)
-        Gen_testplan_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.Gen_testplan_button = tk.Button(Gen_testplan_frame, text="GEN Test Plan", command=self.Gen_testplan_action)
-        self.Gen_testplan_button.pack(side=tk.LEFT, padx=5)
-
-        # Thêm hàng mới: Split MF4
-        split_mf4_frame = tk.Frame(right_frame)
-        split_mf4_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.split_mf4_button = tk.Button(split_mf4_frame, text="Split MF4", command=self.open_split_mf4_dialog)
-        self.split_mf4_button.pack(side=tk.LEFT, padx=5)
-
-        # Thêm nút Load All Paths và Save All Paths
-        btn_frame = tk.Frame(left_frame)
-        btn_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.load_paths_button = tk.Button(btn_frame, text="Load All Paths", command=self.load_all_paths)
-        self.load_paths_button.pack(side=tk.LEFT, padx=5)
-        self.save_paths_button = tk.Button(btn_frame, text="Save All Paths", command=self.save_all_paths)
-        self.save_paths_button.pack(side=tk.LEFT, padx=5)
+        self.runnable_level_entry = tk.Entry(runnable_level_frame, textvariable=self.runnable_level_var)
+        self.runnable_level_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # Thêm 3 ô nhập Project, Variant, Release vào đầu left_frame
-        project_info_frame = tk.Frame(left_frame)
-        project_info_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        tk.Label(project_info_frame, text="Project:").pack(side=tk.LEFT)
+        # Test Plan
+        testplan_frame = tk.Frame(actions_section, bg='#f0f0f0')
+        testplan_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(testplan_frame, text="Test Plan:", width=15, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.Gen_testplan_button = tk.Button(testplan_frame, text="Generate", command=self.Gen_testplan_action, width=8)
+        self.Gen_testplan_button.pack(side=tk.LEFT, padx=(2, 2))
+        self.open_gen_testplan_button = tk.Button(testplan_frame, text="Open", command=self.open_gen_testplan_action, width=6)
+        self.open_gen_testplan_button.pack(side=tk.LEFT, padx=(2, 5))
+        
+        # Utilities section
+        utilities_section = tk.LabelFrame(right_frame, text="Utilities", font=("Arial", 11, "bold"), 
+                                        padx=10, pady=10, bg='#f0f0f0')
+        utilities_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Split MF4
+        self.split_mf4_button = tk.Button(utilities_section, text="Split MF4", command=self.open_split_mf4_dialog)
+        self.split_mf4_button.pack(fill=tk.X, pady=(0, 5))
+        
+        # GEN Missing Signals
+        self.gen_missing_signals_button = tk.Button(utilities_section, text="GEN Missing Signals", 
+                                                  command=self.gen_missing_signals_action)
+        self.gen_missing_signals_button.pack(fill=tk.X, pady=(0, 5))
+        
+        # Buildtime XML
+        buildtime_frame = tk.Frame(utilities_section, bg='#f0f0f0')
+        buildtime_frame.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(buildtime_frame, text="Buildtime XML:", bg='#f0f0f0').pack(anchor=tk.W)
+        buildtime_controls = tk.Frame(buildtime_frame, bg='#f0f0f0')
+        buildtime_controls.pack(fill=tk.X, pady=(2, 0))
+        self.buildtime_var = tk.StringVar()
+        self.buildtime_entry = tk.Entry(buildtime_controls, textvariable=self.buildtime_var)
+        self.buildtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        tk.Button(buildtime_controls, text="Choose", command=self.choose_buildtime_file, width=7).pack(side=tk.LEFT, padx=(0, 2))
+        tk.Button(buildtime_controls, text="Open", command=self.open_buildtime_folder, width=6).pack(side=tk.LEFT)
+
+        # =============================================================================
+        # TERMINAL OUTPUT - In right panel for better space utilization
+        # =============================================================================
+        terminal_section = tk.LabelFrame(right_frame, text="Terminal Output", font=("Arial", 11, "bold"), 
+                                        padx=10, pady=10, bg='#f0f0f0')
+        terminal_section.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Terminal control buttons
+        terminal_buttons_frame = tk.Frame(terminal_section, bg='#f0f0f0')
+        terminal_buttons_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        tk.Button(terminal_buttons_frame, text="Kill All Tasks", command=self.kill_all_tasks, 
+                 bg="#ff4444", fg="white", font=("Arial", 9, "bold"), width=12).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Button(terminal_buttons_frame, text="Clear Console", command=self.clear_console, 
+                 bg="#4444ff", fg="white", font=("Arial", 9, "bold"), width=12).pack(side=tk.LEFT)
+        
+        # Terminal text area with scrollbars - Expandable height
+        terminal_text_frame = tk.Frame(terminal_section, bg='#f0f0f0')
+        terminal_text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        self.terminal_text = tk.Text(terminal_text_frame, width=50, 
+                                   bg="#181818", fg="#e0e0e0", insertbackground="#e0e0e0", 
+                                   font=("Consolas", 9), wrap=tk.WORD)
+        self.terminal_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Vertical scrollbar for terminal
+        yscroll = tk.Scrollbar(terminal_text_frame, orient=tk.VERTICAL, command=self.terminal_text.yview)
+        yscroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.terminal_text.config(yscrollcommand=yscroll.set)
+
+        
+        # ===== LEFT PANEL - CONFIGURATION =====
+        
+        # Project Configuration Section
+        project_section = tk.LabelFrame(left_frame, text="Project Configuration", font=("Arial", 11, "bold"), 
+                                       padx=10, pady=8, bg='#f0f0f0')
+        project_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Controls row
+        controls_frame = tk.Frame(project_section, bg='#f0f0f0')
+        controls_frame.pack(fill=tk.X, pady=(0, 8))
+        self.load_paths_button = tk.Button(controls_frame, text="Load Paths", command=self.load_all_paths, width=12)
+        self.load_paths_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.save_paths_button = tk.Button(controls_frame, text="Save Paths", command=self.save_all_paths, width=12)
+        self.save_paths_button.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # Project info - Each field on separate row for full width
+        project_row1 = tk.Frame(project_section, bg='#f0f0f0')
+        project_row1.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(project_row1, text="Project:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.project_var = tk.StringVar()
-        self.project_entry = tk.Entry(project_info_frame, textvariable=self.project_var, width=10)
-        self.project_entry.pack(side=tk.LEFT, padx=5)
-        tk.Label(project_info_frame, text="Variant:").pack(side=tk.LEFT)
-        self.variant_var = tk.StringVar()
-        self.variant_entry = tk.Entry(project_info_frame, textvariable=self.variant_var, width=10)
-        self.variant_entry.pack(side=tk.LEFT, padx=5)
-        tk.Label(project_info_frame, text="Release:").pack(side=tk.LEFT)
-        self.release_var = tk.StringVar()
-        self.release_entry = tk.Entry(project_info_frame, textvariable=self.release_var, width=10)
-        self.release_entry.pack(side=tk.LEFT, padx=5)
+        self.project_entry = tk.Entry(project_row1, textvariable=self.project_var)
+        self.project_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
         
-        # Di chuyển toàn bộ các dòng thông tin sang left_frame
-        repo_frame = tk.Frame(left_frame)
-        repo_frame.pack(padx=0, pady=5, fill=tk.X)
-        self.repo_button = tk.Button(repo_frame, text="Repository", command=self.repository_action)
-        self.repo_button.pack(side=tk.LEFT)
+        project_row2 = tk.Frame(project_section, bg='#f0f0f0')
+        project_row2.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(project_row2, text="Variant:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.variant_var = tk.StringVar()
+        self.variant_entry = tk.Entry(project_row2, textvariable=self.variant_var)
+        self.variant_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        
+        project_row3 = tk.Frame(project_section, bg='#f0f0f0')
+        project_row3.pack(fill=tk.X)
+        tk.Label(project_row3, text="Release:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.release_var = tk.StringVar()
+        self.release_entry = tk.Entry(project_row3, textvariable=self.release_var)
+        self.release_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+        
+        # Repository & Build Section
+        build_section = tk.LabelFrame(left_frame, text="Repository & Build", font=("Arial", 11, "bold"), 
+                                     padx=10, pady=8, bg='#f0f0f0')
+        build_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Repository
+        repo_frame = tk.Frame(build_section, bg='#f0f0f0')
+        repo_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(repo_frame, text="Repository:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.repo_button = tk.Button(repo_frame, text="Browse", command=self.repository_action, width=8)
+        self.repo_button.pack(side=tk.LEFT, padx=(5, 5))
         self.repo_path_var = tk.StringVar()
-        self.repo_path_entry = tk.Entry(repo_frame, textvariable=self.repo_path_var, width=25)
-        self.repo_path_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        self.open_repo_button = tk.Button(repo_frame, text="Open Repo", command=self.open_repo_folder)
-        self.open_repo_button.pack(side=tk.LEFT, padx=5)
-        # Dòng 2: OPEN BCT BUILD | ô nhập | RUN BCT BUILD
-        bct_frame = tk.Frame(left_frame)
-        bct_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.open_bct_build_button = tk.Button(bct_frame, text="OPEN BCT BUILD", command=self.open_bct_bat_file)
-        self.open_bct_build_button.pack(side=tk.LEFT)
+        self.repo_path_entry = tk.Entry(repo_frame, textvariable=self.repo_path_var)
+        self.repo_path_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_repo_button = tk.Button(repo_frame, text="Open", command=self.open_repo_folder, width=6)
+        self.open_repo_button.pack(side=tk.LEFT)
+        
+        # BCT Build
+        bct_frame = tk.Frame(build_section, bg='#f0f0f0')
+        bct_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(bct_frame, text="BCT Build:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.open_bct_build_button = tk.Button(bct_frame, text="Browse", command=self.open_bct_bat_file, width=8)
+        self.open_bct_build_button.pack(side=tk.LEFT, padx=(5, 5))
         self.bct_out_path_var = tk.StringVar()
-        self.bct_out_entry = tk.Entry(bct_frame, textvariable=self.bct_out_path_var, width=25)
-        self.bct_out_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        self.run_bct_button = tk.Button(bct_frame, text="RUN BCT BUILD", command=self.run_bct_bat)
-        self.run_bct_button.pack(side=tk.LEFT, padx=5)
-        # Dòng mới: A2L Config Path | Nút chọn folder | ô nhập | Quản lý Delivery Folder
-        a2l_config_frame = tk.Frame(left_frame)
-        a2l_config_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        # Nút quản lý delivery folder
-        self.delivery_button = tk.Button(a2l_config_frame, text="Delivery Folders", command=self.delivery_folders)
-        self.delivery_button.pack(   side=tk.LEFT, padx=(0, 10), pady=0)
-        self.delivery_var = tk.StringVar()
-        self.delivery_entry = tk.Entry(a2l_config_frame, textvariable=self.delivery_var, width=25)
-        self.delivery_entry.pack(side=tk.LEFT, padx=0, fill=tk.X, expand=True)
-        self.find_a2l_button = tk.Button(a2l_config_frame, text="Find_A2L", command=self.find_a2l_in_zip)
-        self.find_a2l_button.pack(side=tk.LEFT, padx=5)
-        # Khởi tạo biến cho A2L Table (dùng cho GEN A2L_Table)
-        self.a2l_table_var = tk.StringVar()
-        # Biến riêng cho đường dẫn .a2l thực tế (kết quả Find_A2L)
-        self.a2l_actual_var = tk.StringVar()
-        # Dòng mới: Hiển thị đường dẫn .a2l
-        a2l_path_frame = tk.Frame(left_frame)
-        a2l_path_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        tk.Label(a2l_path_frame, text="A2L Path:").pack(side=tk.LEFT)
-        self.a2l_path_entry = tk.Entry(a2l_path_frame, textvariable=self.a2l_actual_var, width=40, state="readonly")
-        self.a2l_path_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        # Dòng mới: GEN A2L_Table | Ô Nhập | Open A2L_Table
-        a2l_frame = tk.Frame(left_frame)
-        a2l_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        self.gen_a2l_button = tk.Button(a2l_frame, text="GEN A2L_Table", command=self.gen_a2l_table)
-        self.gen_a2l_button.pack(side=tk.LEFT)
-        self.a2l_table_entry = tk.Entry(a2l_frame, textvariable=self.a2l_table_var, width=25)
-        self.a2l_table_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        self.open_a2l_button = tk.Button(a2l_frame, text="Open A2L_Table", command=self.open_a2l_file)
-        self.open_a2l_button.pack(side=tk.LEFT)
-        # Dòng 3: Build_Selena | ô Nhập | Run
-        build_selena_frame = tk.Frame(left_frame)
-        build_selena_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.run_build_selena_button = tk.Button(build_selena_frame, text="BUILD SELENA", command=self.run_build_selena_bat)
-        self.run_build_selena_button.pack(side=tk.LEFT, padx=5)
+        self.bct_out_entry = tk.Entry(bct_frame, textvariable=self.bct_out_path_var)
+        self.bct_out_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.run_bct_button = tk.Button(bct_frame, text="Run", command=self.run_bct_bat, width=6)
+        self.run_bct_button.pack(side=tk.LEFT)
+        
+        # Build Selena
+        build_selena_frame = tk.Frame(build_section, bg='#f0f0f0')
+        build_selena_frame.pack(fill=tk.X)
+        tk.Label(build_selena_frame, text="Build Selena:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.run_build_selena_button = tk.Button(build_selena_frame, text="Build", command=self.run_build_selena_bat, width=8)
+        self.run_build_selena_button.pack(side=tk.LEFT, padx=(5, 5))
         self.build_selena_path_var = tk.StringVar()
-        self.build_selena_entry = tk.Entry(build_selena_frame, textvariable=self.build_selena_path_var, width=25)
-        self.build_selena_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-
-        # Dòng 4: Env chọn conda
-        env_frame = tk.Frame(left_frame)
-        env_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.env_button = tk.Button(env_frame, text="Select Conda Env", command=self.show_conda_env_selector)
-        self.env_button.pack(side=tk.LEFT)
+        self.build_selena_entry = tk.Entry(build_selena_frame, textvariable=self.build_selena_path_var)
+        self.build_selena_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # A2L Configuration Section
+        a2l_section = tk.LabelFrame(left_frame, text="A2L Configuration", font=("Arial", 11, "bold"), 
+                                   padx=10, pady=8, bg='#f0f0f0')
+        a2l_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Delivery folders
+        delivery_frame = tk.Frame(a2l_section, bg='#f0f0f0')
+        delivery_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(delivery_frame, text="Delivery:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.delivery_button = tk.Button(delivery_frame, text="Manage", command=self.delivery_folders, width=8)
+        self.delivery_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.delivery_var = tk.StringVar()
+        self.delivery_entry = tk.Entry(delivery_frame, textvariable=self.delivery_var)
+        self.delivery_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.find_a2l_button = tk.Button(delivery_frame, text="Find A2L", command=self.find_a2l_in_zip, width=8)
+        self.find_a2l_button.pack(side=tk.LEFT)
+        
+        # A2L Path (readonly)
+        self.a2l_actual_var = tk.StringVar()
+        a2l_path_frame = tk.Frame(a2l_section, bg='#f0f0f0')
+        a2l_path_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(a2l_path_frame, text="A2L Path:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.a2l_path_entry = tk.Entry(a2l_path_frame, textvariable=self.a2l_actual_var, state="readonly", 
+                                      bg='#e8e8e8')
+        self.a2l_path_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+        
+        # A2L Table
+        self.a2l_table_var = tk.StringVar()
+        a2l_table_frame = tk.Frame(a2l_section, bg='#f0f0f0')
+        a2l_table_frame.pack(fill=tk.X)
+        tk.Label(a2l_table_frame, text="A2L Table:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.gen_a2l_button = tk.Button(a2l_table_frame, text="Generate", command=self.gen_a2l_table, width=8)
+        self.gen_a2l_button.pack(side=tk.LEFT, padx=(5, 2))
+        self.choose_a2l_button = tk.Button(a2l_table_frame, text="Choose", command=self.choose_a2l_file, width=7)
+        self.choose_a2l_button.pack(side=tk.LEFT, padx=(0, 2))
+        self.open_a2l_button = tk.Button(a2l_table_frame, text="Open", command=self.open_a2l_folder, width=6)
+        self.open_a2l_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.a2l_table_entry = tk.Entry(a2l_table_frame, textvariable=self.a2l_table_var)
+        self.a2l_table_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Environment & Tools Section
+        env_section = tk.LabelFrame(left_frame, text="Environment & Tools", font=("Arial", 11, "bold"), 
+                                   padx=10, pady=8, bg='#f0f0f0')
+        env_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Conda Environment
+        env_frame = tk.Frame(env_section, bg='#f0f0f0')
+        env_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(env_frame, text="Conda Env:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.env_button = tk.Button(env_frame, text="Select", command=self.show_conda_env_selector, width=8)
+        self.env_button.pack(side=tk.LEFT, padx=(5, 10))
         self.selected_env_var = tk.StringVar()
-        self.selected_env_label = tk.Label(env_frame, textvariable=self.selected_env_var, fg="blue")
-        self.selected_env_label.pack(side=tk.LEFT, padx=10)
-
-        # Dòng 5: JSON | Nút chọn file
-        json_frame = tk.Frame(left_frame)
-        json_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        self.open_json_button = tk.Button(json_frame, text="OPEN JSON", command=self.open_json_file)
-        self.open_json_button.pack(side=tk.LEFT)
-        self.json_var = tk.StringVar()
-        self.json_entry = tk.Entry(json_frame, textvariable=self.json_var, width=25)
-        self.json_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng 6: SCOM | Nút chọn file | ô nhập | Find_SCOM
-        scom_frame = tk.Frame(left_frame)
-        scom_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.open_scom_button = tk.Button(scom_frame, text="OPEN SCOM", command=self.open_scom_file)
-        self.open_scom_button.pack(side=tk.LEFT)
-        self.scom_var = tk.StringVar()
-        # Thêm nút Find_SCOM
-        self.find_scom_button = tk.Button(scom_frame, text="Find_SCOM", command=self.find_scom_in_zip)
-        self.find_scom_button.pack(side=tk.LEFT, padx=5)
-        # Biến và Entry readonly cho SCOM thực tế
-        self.scom_actual_var = tk.StringVar()
-        self.scom_path_entry = tk.Entry(scom_frame, textvariable=self.scom_actual_var, width=40, state="readonly")
-        self.scom_path_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        # Dòng 7: MF4 | Nút chọn file | ô nhập
-        mf4_frame = tk.Frame(left_frame)
-        mf4_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        # Dòng mới: Thêm nút Choose MF4
-        self.choose_mf4_button = tk.Button(mf4_frame, text="Choose MF4", command=self.choose_mf4_file)
-        self.choose_mf4_button.pack(side=tk.LEFT, padx=5)
-        self.mf4_var = tk.StringVar()
-        self.mf4_entry = tk.Entry(mf4_frame, textvariable=self.mf4_var, width=25)
-        self.mf4_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        self.open_mf4_button = tk.Button(mf4_frame, text="OPEN MF4", command=self.open_mf4_file)
-        self.open_mf4_button.pack(side=tk.LEFT)
-        # Dòng 8: Selena Toolbox | Nút chọn file | ô nhập
-        toolbox_frame = tk.Frame(left_frame)
-        toolbox_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        self.open_toolbox_button = tk.Button(toolbox_frame, text="OPEN SELENA TOOLBOX", command=self.open_toolbox_file)
-        self.open_toolbox_button.pack(side=tk.LEFT)
+        self.selected_env_label = tk.Label(env_frame, textvariable=self.selected_env_var, fg="#2E7D32", 
+                                          font=("Arial", 9, "bold"), bg='#f0f0f0')
+        self.selected_env_label.pack(side=tk.LEFT)
+        
+        # Selena Toolbox
+        toolbox_frame = tk.Frame(env_section, bg='#f0f0f0')
+        toolbox_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(toolbox_frame, text="Toolbox:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.open_toolbox_button = tk.Button(toolbox_frame, text="Browse", command=self.open_toolbox_file, width=8)
+        self.open_toolbox_button.pack(side=tk.LEFT, padx=(5, 5))
         self.toolbox_var = tk.StringVar()
-        self.toolbox_entry = tk.Entry(toolbox_frame, textvariable=self.toolbox_var, width=25)
-        self.toolbox_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng 9: GEN Mem&Sequence
-        self.gen_button = tk.Button(left_frame, text="GEN Mem&Sequence", command=self.gen_mem_sequence)
-        self.gen_button.pack(padx=20, pady=(5,0))
-        # Thêm các checkbox option
-        option_frame = tk.Frame(left_frame)
-        option_frame.pack(padx=0, pady=(0,5), fill=tk.X)
+        self.toolbox_entry = tk.Entry(toolbox_frame, textvariable=self.toolbox_var)
+        self.toolbox_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Selena EXE
+        exe_frame = tk.Frame(env_section, bg='#f0f0f0')
+        exe_frame.pack(fill=tk.X)
+        tk.Label(exe_frame, text="Selena EXE:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.open_selena_exe_button = tk.Button(exe_frame, text="Browse", command=self.open_selena_exe_file, width=8)
+        self.open_selena_exe_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.selena_exe_var = tk.StringVar()
+        self.selena_exe_entry = tk.Entry(exe_frame, textvariable=self.selena_exe_var)
+        self.selena_exe_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Data Files Section
+        data_section = tk.LabelFrame(left_frame, text="Data Files", font=("Arial", 11, "bold"), 
+                                    padx=10, pady=8, bg='#f0f0f0')
+        data_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # JSON
+        json_frame = tk.Frame(data_section, bg='#f0f0f0')
+        json_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(json_frame, text="JSON Config:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.open_json_button = tk.Button(json_frame, text="Browse", command=self.open_json_file, width=8)
+        self.open_json_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.json_var = tk.StringVar()
+        self.json_entry = tk.Entry(json_frame, textvariable=self.json_var)
+        self.json_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # SCOM
+        scom_frame = tk.Frame(data_section, bg='#f0f0f0')
+        scom_frame.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(scom_frame, text="SCOM:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.open_scom_button = tk.Button(scom_frame, text="Browse", command=self.open_scom_file, width=8)
+        self.open_scom_button.pack(side=tk.LEFT, padx=(5, 2))
+        self.find_scom_button = tk.Button(scom_frame, text="Find", command=self.find_scom_in_zip, width=6)
+        self.find_scom_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.scom_actual_var = tk.StringVar()
+        self.scom_path_entry = tk.Entry(scom_frame, textvariable=self.scom_actual_var, state="readonly", bg='#e8e8e8')
+        self.scom_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # MF4 & Adapter Files Section
+        mf4_section = tk.LabelFrame(left_frame, text="MF4 & Adapter Files", font=("Arial", 11, "bold"), 
+                                   padx=10, pady=8, bg='#f0f0f0')
+        mf4_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # MF4 Player 1
+        mf4_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        mf4_frame.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(mf4_frame, text="MF4 Player 1:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_mf4_button = tk.Button(mf4_frame, text="Choose", command=self.choose_mf4_file, width=8)
+        self.choose_mf4_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.mf4_var = tk.StringVar()
+        self.mf4_entry = tk.Entry(mf4_frame, textvariable=self.mf4_var)
+        self.mf4_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_mf4_button = tk.Button(mf4_frame, text="Open", command=self.open_mf4_file, width=6)
+        self.open_mf4_button.pack(side=tk.LEFT)
+        
+        # Adapter Player 1
+        adapter_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        adapter_frame.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(adapter_frame, text="Adapter 1:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_adapter_button = tk.Button(adapter_frame, text="Choose", command=self.choose_adapter_file, width=8)
+        self.choose_adapter_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.adapter_file_var = getattr(self, 'adapter_file_var', tk.StringVar())
+        self.adapter_entry = tk.Entry(adapter_frame, textvariable=self.adapter_file_var)
+        self.adapter_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_adapter_button = tk.Button(adapter_frame, text="Open", command=self.open_adapter_folder, width=6)
+        self.open_adapter_button.pack(side=tk.LEFT)
+        
+        # MF4 Player 2
+        mf4_02_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        mf4_02_frame.pack(fill=tk.X, pady=(0, 5))
+        tk.Label(mf4_02_frame, text="MF4 Player 2:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_mf4_02_button = tk.Button(mf4_02_frame, text="Choose", command=self.choose_mf4_02_file, width=8)
+        self.choose_mf4_02_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.mf4_02_var = tk.StringVar()
+        self.mf4_02_entry = tk.Entry(mf4_02_frame, textvariable=self.mf4_02_var)
+        self.mf4_02_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_mf4_02_button = tk.Button(mf4_02_frame, text="Open", command=self.open_mf4_02_file, width=6)
+        self.open_mf4_02_button.pack(side=tk.LEFT)
+        
+        # Adapter Player 2
+        adapter_02_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        adapter_02_frame.pack(fill=tk.X)
+        tk.Label(adapter_02_frame, text="Adapter 2:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_adapter_02_button = tk.Button(adapter_02_frame, text="Choose", command=self.choose_adapter_02_file, width=8)
+        self.choose_adapter_02_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.adapter_02_var = tk.StringVar()
+        self.adapter_02_entry = tk.Entry(adapter_02_frame, textvariable=self.adapter_02_var)
+        self.adapter_02_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_adapter_02_button = tk.Button(adapter_02_frame, text="Open", command=self.open_adapter_02_folder, width=6)
+        self.open_adapter_02_button.pack(side=tk.LEFT)
+        
+        # Memory & Sequence Generation Section
+        mem_seq_section = tk.LabelFrame(left_frame, text="Memory & Sequence Generation", font=("Arial", 11, "bold"), 
+                                       padx=10, pady=8, bg='#f0f0f0')
+        mem_seq_section.pack(fill=tk.X, pady=(0, 10))
+        
+        # Generate button and options
+        gen_controls_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        gen_controls_frame.pack(fill=tk.X, pady=(0, 8))
+        self.gen_button = tk.Button(gen_controls_frame, text="Generate Mem&Sequence", 
+                                   command=self.gen_mem_sequence, font=("Arial", 10, "bold"), 
+                                   bg='#2196F3', fg='white', height=2)
+        self.gen_button.pack(fill=tk.X)
+        
+        # Options checkboxes
+        option_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        option_frame.pack(fill=tk.X, pady=(5, 0))
+        tk.Label(option_frame, text="Options:", bg='#f0f0f0', font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
         self.ticket_vars = {
             'ALL': tk.BooleanVar(value=True),
             'sequence': tk.BooleanVar(value=False),
@@ -224,114 +452,100 @@ class MF4ImporterGUI:
                 self.ticket_vars['ALL'].set(False)
         for i, name in enumerate(['ALL','sequence','mempool','systemtime']):
             cb = tk.Checkbutton(option_frame, text=name, variable=self.ticket_vars[name],
-                               command=lambda n=name: on_ticket_change(n))
+                               command=lambda n=name: on_ticket_change(n), bg='#f0f0f0')
             cb.pack(side=tk.LEFT, padx=5)
             self.ticket_boxes[name] = cb
-        # Dòng 10: Systemtime | ô nhập
-        systemtime_frame = tk.Frame(left_frame)
-        systemtime_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        tk.Label(systemtime_frame, text="Systemtime:").pack(side=tk.LEFT)
+            
+        # Individual file paths within the section
+        paths_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        paths_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # Systemtime
+        systemtime_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        systemtime_row.pack(fill=tk.X, pady=2)
+        tk.Label(systemtime_row, text="Systemtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.systemtime_var = tk.StringVar()
-        self.systemtime_entry = tk.Entry(systemtime_frame, textvariable=self.systemtime_var, width=25)
-        self.systemtime_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng 11: Sequence | ô nhập
-        sequence_frame = tk.Frame(left_frame)
-        sequence_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        tk.Label(sequence_frame, text="Sequence:").pack(side=tk.LEFT)
+        self.systemtime_entry = tk.Entry(systemtime_row, textvariable=self.systemtime_var)
+        self.systemtime_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+        
+        # Sequence
+        sequence_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        sequence_row.pack(fill=tk.X, pady=2)
+        tk.Label(sequence_row, text="Sequence:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.sequence_var = tk.StringVar()
-        self.sequence_entry = tk.Entry(sequence_frame, textvariable=self.sequence_var, width=25)
-        self.sequence_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng 12: Mempool | ô nhập
-        mempool_frame = tk.Frame(left_frame)
-        mempool_frame.pack(padx=0, pady=(0, 10), fill=tk.X)
-        tk.Label(mempool_frame, text="Mempool:").pack(side=tk.LEFT)
+        self.sequence_entry = tk.Entry(sequence_row, textvariable=self.sequence_var)
+        self.sequence_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+        
+        # Mempool
+        mempool_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        mempool_row.pack(fill=tk.X, pady=2)
+        tk.Label(mempool_row, text="Mempool:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.mempool_var = tk.StringVar()
-        self.mempool_entry = tk.Entry(mempool_frame, textvariable=self.mempool_var, width=25)
-        self.mempool_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
+        self.mempool_entry = tk.Entry(mempool_row, textvariable=self.mempool_var)
+        self.mempool_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
 
-        # Dòng 13: Selena .EXE | Nút chọn file
-        selena_exe_frame = tk.Frame(left_frame)
-        selena_exe_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        self.open_selena_exe_button = tk.Button(selena_exe_frame, text="Selena .EXE", command=self.open_selena_exe_file)
-        self.open_selena_exe_button.pack(side=tk.LEFT)
-        self.selena_exe_var = tk.StringVar()
-        self.selena_exe_entry = tk.Entry(selena_exe_frame, textvariable=self.selena_exe_var, width=25)
-        self.selena_exe_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng 14: SOURCE | droplist | Add_command | ô nhập
-        source_frame = tk.Frame(left_frame)
-        source_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        tk.Label(source_frame, text="SOURCE:").pack(side=tk.LEFT)
+        # =============================================================================
+        # RUNTIME GENERATION & FILES
+        # =============================================================================
+        runtime_frame = tk.LabelFrame(left_frame, text="Runtime Generation & Files", bg='#f0f0f0', pady=5)
+        runtime_frame.pack(padx=10, pady=(0, 5), fill=tk.X)
+        
+        # SOURCE selection
+        source_row = tk.Frame(runtime_frame, bg='#f0f0f0')
+        source_row.pack(padx=10, pady=2, fill=tk.X)
+        tk.Label(source_row, text="SOURCE:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.source_var = tk.StringVar(value="RadarFC")
         self.source_options = ["RadarFC", "RadarFL", "RadarFR", "RadarRL", "RadarRR"]
-        self.source_menu = tk.OptionMenu(source_frame, self.source_var, *self.source_options)
-        self.source_menu.pack(side=tk.LEFT, padx=5)
+        self.source_menu = tk.OptionMenu(source_row, self.source_var, *self.source_options)
+        self.source_menu.config(width=8)
+        self.source_menu.pack(side=tk.LEFT, padx=(0, 5))
         # Khi đổi SOURCE thì tự động lấy delivery folder nếu có
-        self.source_var.trace_add("write", lambda *args: self.update_a2l_config_by_project())
-        # Dòng 15: Gen Runtime | Ô nhập | Open Runtime | Gen Runtime
-        runtime_frame = tk.Frame(left_frame)
-        runtime_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-        self.gen_runtime_button = tk.Button(runtime_frame, text="Gen Runtime", command=self.run_gen_runtime)
-        self.gen_runtime_button.pack(side=tk.LEFT, padx=5)
-        # Thêm nút OLD IMPORT sau nút GEN RUNTIME
-        self.old_import_button = tk.Button(runtime_frame, text="OLD IMPORT", command=self.old_import_action)
-        self.old_import_button.pack(side=tk.LEFT, padx=5)
-        self.open_runtime_button = tk.Button(runtime_frame, text="Open Runtime", command=self.open_runtime_file)
-        self.open_runtime_button.pack(side=tk.LEFT)
+        self.source_var.trace_add("write", lambda *args: self.root.after_idle(self.update_a2l_config_by_project()))
+        
+        # Runtime generation and selection
+        runtime_row = tk.Frame(runtime_frame, bg='#f0f0f0')
+        runtime_row.pack(padx=10, pady=2, fill=tk.X)
+        tk.Label(runtime_row, text="Runtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        
+        # Runtime action buttons
+        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=8, command=self.run_gen_runtime, bg='#4CAF50', fg='white')
+        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+        
+        self.old_import_button = tk.Button(runtime_row, text="Import", width=6, command=self.old_import_action)
+        self.old_import_button.pack(side=tk.LEFT, padx=(0, 2))
+        
+        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=6, command=self.choose_runtime_file)
+        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+        
+        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=6, command=self.open_runtime_file)
+        self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 5))
+        
         self.runtime_var = tk.StringVar()
-        self.runtime_entry = tk.Entry(runtime_frame, textvariable=self.runtime_var, width=25)
-        self.runtime_entry.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
-        # Dòng XX: Terminal (hiển thị log)
-        terminal_frame = tk.Frame(left_frame)
-        terminal_frame.pack(padx=0, pady=10, fill=tk.BOTH, expand=True)
-        tk.Label(terminal_frame, text="Terminal:").pack(anchor=tk.W)
-        self.terminal_text = tk.Text(terminal_frame, height=10, width=60, bg="#181818", fg="#e0e0e0", insertbackground="#e0e0e0", font=("Consolas", 10), wrap=tk.WORD)
-        self.terminal_text.pack(fill=tk.BOTH, expand=True)
-        # Thêm thanh cuộn ngang và dọc
-        yscroll = tk.Scrollbar(terminal_frame, orient=tk.VERTICAL, command=self.terminal_text.yview)
-        yscroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.terminal_text.config(yscrollcommand=yscroll.set)
-        xscroll = tk.Scrollbar(terminal_frame, orient=tk.HORIZONTAL, command=self.terminal_text.xview)
-        xscroll.pack(side=tk.BOTTOM, fill=tk.X)
-        self.terminal_text.config(xscrollcommand=xscroll.set)
+        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var)
+        self.runtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Placeholder cho ô nhập bct_out_path_var
+        # Initialize placeholder for BCT output entry
         self.bct_out_placeholder = "path to bct.bat file"
         self.bct_out_entry.insert(0, self.bct_out_placeholder)
         self.bct_out_entry.config(fg="grey")
 
-        # Không dùng self.bct_out_path_file và file txt nữa
-        # Load bct_out_path từ all_paths.json nếu có
-        import os
-        record_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record")
-        all_paths_file = os.path.join(record_dir, "all_paths.json")
-        project = self.project_var.get().strip()
-        variant = self.variant_var.get().strip()
-        release = self.release_var.get().strip()
-        key = f"{project}|{variant}|{release}" if project and variant and release else None
-        if os.path.isfile(all_paths_file) and key:
-            try:
-                with open(all_paths_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                bct_path = data.get(key, {}).get("bct_out", "")
-                if bct_path:
-                    self.bct_out_entry.delete(0, tk.END)
-                    self.bct_out_entry.insert(0, bct_path)
-                    self.bct_out_entry.config(fg="black")
-            except Exception:
-                pass
+        # Initialize remaining variables
+        self.bct_options = {}
+        self.info_text = self.terminal_text
+        self.source_command_var = tk.StringVar()
+        
+        # Setup path_vars after all variables are created
+        self.setup_path_vars()
+        
+        # Load saved configuration from all_paths.json if available
+        self.load_saved_paths()
+        
+        # Set up trace for auto-saving BCT output path
         self.bct_out_path_var.trace_add("write", self.save_bct_out_path)
 
-        # Bổ sung khởi tạo các biến còn thiếu
-        self.bct_options = {}  # Để tránh lỗi khi dùng self.bct_options
-        self.info_text = self.terminal_text  # Đảm bảo self.info_text luôn tồn tại
-        self.adapter_file_var = tk.StringVar()  # Đảm bảo luôn có biến này
-        self.source_command_var = tk.StringVar()  # Đảm bảo luôn có biến này
-        # Thêm frame cho BCT options
-        self.bct_options_frame = tk.Frame(left_frame)
-        self.bct_options_frame.pack(padx=0, pady=(0, 5), fill=tk.X)
-
-
-        # Khởi tạo dict chứa tất cả các biến path_var
+    def setup_path_vars(self):
+        """Initialize path_vars dictionary after all variables are created"""
+        # Initialize path_vars dictionary for saving/loading all configurations
         self.path_vars = {
             "project": self.project_var,
             "variant": self.variant_var,
@@ -339,23 +553,64 @@ class MF4ImporterGUI:
             "repo": self.repo_path_var,
             "toolbox": self.toolbox_var,
             "json": self.json_var,
-            "scom": self.scom_var,
             "mf4": self.mf4_var,
+            "mf4_02": self.mf4_02_var,
             "exe": self.selena_exe_var,
             "build_selena": self.build_selena_path_var,
             "bct_out": self.bct_out_path_var,
             "runtime": self.runtime_var,
             "a2l_config": self.delivery_var,
-            # Thêm các biến liên quan đến SCOM, systemtime, sequence, mempool
+            "adapter": self.adapter_file_var,
+            "adapter_02": self.adapter_02_var,
+            "run_order": self.run_order_var,
+            "a2l_actual": self.a2l_actual_var,
+            "a2l_table": self.a2l_table_var,
+            "runnable_level": self.runnable_level_var,
+            "buildtime": self.buildtime_var,
             "scom_actual": self.scom_actual_var,
             "systemtime": self.systemtime_var,
             "sequence": self.sequence_var,
             "mempool": self.mempool_var,
         }
-        # Đảm bảo các biến path_vars luôn có đủ adapter
-        self.path_vars["adapter"] = self.adapter_file_var
-        # Thêm biến run_order vào path_vars để tiện lưu/khôi phục
-        self.path_vars["run_order"] = self.run_order_var
+
+    def load_saved_paths(self):
+        """Load saved paths from all_paths.json"""
+        import os
+        record_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record")
+        all_paths_file = os.path.join(record_dir, "all_paths.json")
+        project = self.project_var.get().strip()
+        variant = self.variant_var.get().strip()
+        release = self.release_var.get().strip()
+        key = f"{project}|{variant}|{release}" if project and variant and release else None
+        
+        if os.path.isfile(all_paths_file) and key:
+            try:
+                with open(all_paths_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                saved_data = data.get(key, {})
+                
+                # Load BCT path specifically for the placeholder
+                bct_path = saved_data.get("bct_out", "")
+                if bct_path:
+                    self.bct_out_entry.delete(0, tk.END)
+                    self.bct_out_entry.insert(0, bct_path)
+                    self.bct_out_entry.config(fg="black")
+                    
+                # Load other paths if path_vars exists
+                if hasattr(self, 'path_vars'):
+                    for key_name, var in self.path_vars.items():
+                        if key_name in saved_data:
+                            var.set(saved_data[key_name])
+            except Exception:
+                pass
+
+    def set_window_icon(self, window):
+        """Helper method to set icon for any window"""
+        if self.icon_photo:
+            try:
+                window.iconphoto(True, self.icon_photo)
+            except Exception:
+                pass
 
         # Load giá trị từ all_paths.json nếu có, nếu chưa có thì tạo trường mới trong json
         record_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record")
@@ -380,9 +635,15 @@ class MF4ImporterGUI:
                 for k, v in self.path_vars.items():
                     v.set(data[key].get(k, ""))
 
-        # Tự động lưu vào all_paths.json khi bất kỳ path_var nào thay đổi
+        # Bỏ trace_add cho project/variant/release để tránh lưu rác
+        # self.project_var.trace_add("write", self.save_all_paths)
+        # self.variant_var.trace_add("write", self.save_all_paths)
+        # self.release_var.trace_add("write", self.save_all_paths)
+        
+        # Tự động lưu vào all_paths.json khi bất kỳ path_var nào khác thay đổi (trừ project/variant/release)
         for k, v in self.path_vars.items():
-            v.trace_add("write", self.save_all_paths)
+            if k not in ["project", "variant", "release"]:
+                v.trace_add("write", self.save_all_paths)
 
         # Load selena_env từ all_paths.json
         self.load_selena_env()
@@ -412,6 +673,44 @@ class MF4ImporterGUI:
         if file_path:
             # Cập nhật đường dẫn file vào adapter_file_var
             self.adapter_file_var.set(file_path)
+
+    def choose_adapter_file(self):
+        # Mở File Explorer để chọn file Adapter 1
+        file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter File")
+        
+        if file_path:
+            self.adapter_file_var.set(file_path)
+
+    def open_adapter_folder(self):
+        current_file_path = self.adapter_file_var.get().strip()
+        if current_file_path and os.path.isfile(current_file_path):
+            folder_path = os.path.dirname(current_file_path)
+            os.startfile(folder_path)
+        else:
+            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter File")
+            if file_path:
+                self.adapter_file_var.set(file_path)
+                folder_path = os.path.dirname(file_path)
+                os.startfile(folder_path)
+
+    def choose_adapter_02_file(self):
+        # Mở File Explorer để chọn file Adapter 2
+        file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 02 File")
+        
+        if file_path:
+            self.adapter_02_var.set(file_path)
+
+    def open_adapter_02_folder(self):
+        current_file_path = self.adapter_02_var.get().strip()
+        if current_file_path and os.path.isfile(current_file_path):
+            folder_path = os.path.dirname(current_file_path)
+            os.startfile(folder_path)
+        else:
+            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 02 File")
+            if file_path:
+                self.adapter_02_var.set(file_path)
+                folder_path = os.path.dirname(file_path)
+                os.startfile(folder_path)
 
     def open_mf4_file(self):
         current_file_path = self.mf4_var.get().strip()
@@ -769,6 +1068,7 @@ class MF4ImporterGUI:
             return
         # Hiển thị top-level chọn env
         top = tk.Toplevel(self.root)
+        self.set_window_icon(top)
         top.title("Chọn Conda Env")
         tk.Label(top, text="Chọn một conda env:").pack(padx=10, pady=10)
         listbox = tk.Listbox(top, width=40, height=10)
@@ -831,6 +1131,12 @@ class MF4ImporterGUI:
             new_val = selected
         self.source_command_var.set(new_val)
 
+    def choose_runtime_file(self):
+        file_path = filedialog.askopenfilename(filetypes=[("XML files", "*.xml"), ("All files", "*.*")])
+        if file_path:
+            self.runtime_var.set(file_path)
+            self.runtime_entry.config(fg="black")
+
     def open_runtime_file(self):
         path = self.runtime_var.get().strip()
         if path and os.path.isfile(path):
@@ -840,10 +1146,7 @@ class MF4ImporterGUI:
             except Exception as e:
                 messagebox.showerror("Open Folder", f"Không thể mở thư mục: {e}")
         else:
-            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")])
-            if file_path:
-                self.runtime_var.set(file_path)
-                self.runtime_entry.config(fg="black")
+            messagebox.showerror("Open Folder", "Không tìm thấy file Runtime để mở thư mục.")
 
     def run_gen_runtime(self):
         def worker():
@@ -925,7 +1228,7 @@ class MF4ImporterGUI:
                 f"-dp mdf mdfplayer"
             )
             if adapter_path:
-                command += f" -a {adapter_path}"
+                command += f" --a_mdfplayer01 {adapter_path}"
 
             self.root.after(0, lambda: self.append_info_text(f"[COMMAND] {command}\n"))
             self.root.after(0, lambda: self.append_info_text("[PROGRESS] Đang chạy Gen Runtime...\n"))
@@ -974,7 +1277,6 @@ class MF4ImporterGUI:
         threading.Thread(target=worker, daemon=True).start()
 
     def gen_a2l_table(self):
-        import threading
         def worker():
             a2l_path = os.path.normpath(self.a2l_actual_var.get().strip())
             if not a2l_path or not os.path.isfile(a2l_path):
@@ -991,10 +1293,17 @@ class MF4ImporterGUI:
             if not repo_path:
                 self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn Repository!"))
                 return
-            # Build im_lazy.py path dynamically
-            im_lazy_path = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "im_lazy.py"))
+            # Build im_lazy.py path dynamically based on project
+            if project.upper() == "BYD":
+                # BYD project: <repo>\apl\byd\selena\im_lazy.py
+                im_lazy_path = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "im_lazy.py"))
+                out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
+            else:
+                # Other projects: <repo>\{project}_apl\selena\im_lazy.py
+                im_lazy_path = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "im_lazy.py"))
+                out_dir = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "config", "mapping"))
+            
             cmd1 = [sys.executable, im_lazy_path]
-            out_dir = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "config", "mapping"))
             os.makedirs(out_dir, exist_ok=True)
             out_file = os.path.normpath(os.path.join(out_dir, f"a2lTable_{variant}_{release}.txt"))
             parser_py = os.path.normpath(os.path.join(repo_path, "ip_dc", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
@@ -1010,17 +1319,21 @@ class MF4ImporterGUI:
                 return
             self.root.after(0, lambda: self.append_info_text(f"[GEN] Chạy: {' '.join(cmd2)}\n"))
             try:
-                result2 = subprocess.run(cmd2, capture_output=True, text=True, check=True)
+                result2 = subprocess.run(cmd2, capture_output=True, text=True)
                 self.root.after(0, lambda: self.append_info_text(result2.stdout))
                 if result2.stderr:
                     self.root.after(0, lambda: self.append_info_text(result2.stderr))
-                self.root.after(0, lambda: self.a2l_table_var.set(out_file))
-                self.root.after(0, lambda: self.append_info_text(f"[GEN] Đã tạo: {out_file}\n"))
+                if result2.returncode == 0:
+                    self.root.after(0, lambda: self.a2l_table_var.set(out_file))
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN] Đã tạo: {out_file}\n"))
+                else:
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN] ASAPParser.py failed with exit code {result2.returncode}\n"))
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", f"ASAPParser.py failed!\nCommand: {' '.join(cmd2)}\nExit code: {result2.returncode}"))
             except Exception as e:
                 self.root.after(0, lambda e=e: self.append_info_text(f"[GEN] Lỗi chạy ASAPParser.py: {e}\n"))
         threading.Thread(target=worker, daemon=True).start()
 
-    def open_a2l_file(self):
+    def choose_a2l_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("A2L Table files", "*.*"), ("All files", "*.*")])
         if file_path:
             self.a2l_table_var.set(file_path)
@@ -1048,6 +1361,7 @@ class MF4ImporterGUI:
                 folders = []
         # Dialog
         top = tk.Toplevel(self.root)
+        self.set_window_icon(top)
         top.title("Quản lý Delivery Folders")
         tk.Label(top, text="Danh sách Delivery Folder:").pack(padx=10, pady=5)
         list_frame = tk.Frame(top)
@@ -1157,15 +1471,18 @@ class MF4ImporterGUI:
         def worker():
             from tkinter import simpledialog, messagebox
             import glob
+            import shutil
             self.append_info_text("[A2L] Bắt đầu tìm kiếm file A2L trong .zip/.7z...\n")
             delivery_path = self.delivery_var.get().strip()
             project = self.project_var.get().strip()
             variant = self.variant_var.get().strip()
             release = self.release_var.get().strip()
             source = self.source_var.get().strip() if hasattr(self, 'source_var') else ''
+                
             if not project or not variant or not release or not source:
                 self.root.after(0, lambda: messagebox.showerror("Lỗi", "Không thể phân tích được project/variant/release từ đường dẫn hoặc source!"))
                 self.append_info_text("[A2L] Không thể phân tích project/variant/release từ đường dẫn hoặc source.\n")
+                return
             project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             a2l_folder = os.path.join(project_root, "A2L", project, variant, release)
             os.makedirs(a2l_folder, exist_ok=True)
@@ -1187,27 +1504,58 @@ class MF4ImporterGUI:
                     if archive_path.lower().endswith('.zip'):
                         import zipfile
                         with zipfile.ZipFile(archive_path, 'r') as zf:
-                            a2l_files = [f for f in zf.namelist() if os.path.basename(f).lower() == a2l_filename.lower()]
+                            # Tìm tất cả file có tên kết thúc bằng a2l_filename (không phân biệt hoa thường)
+                            all_files = zf.namelist()
+                            a2l_files = [f for f in all_files if f.lower().endswith(a2l_filename.lower())]
                             if a2l_files:
-                                a2l_file = a2l_files[0]
-                                self.append_info_text(f"[A2L] Đang giải nén {a2l_file}...\n")
+                                # Ưu tiên file có tên chính xác, nếu không thì lấy file đầu tiên
+                                a2l_file = None
+                                for f in a2l_files:
+                                    if os.path.basename(f).lower() == a2l_filename.lower():
+                                        a2l_file = f
+                                        break
+                                if not a2l_file:
+                                    a2l_file = a2l_files[0]
+                                
+                                self.append_info_text(f"[A2L] Tìm thấy {len(a2l_files)} file .a2l, đang giải nén: {a2l_file}...\n")
                                 with zf.open(a2l_file) as src, open(dest_path, 'wb') as dst:
                                     shutil.copyfileobj(src, dst)
-                                self.root.after(0, lambda: self.a2l_actual_var.set(dest_path))
-                                self.append_info_text(f"[A2L] Đã giải nén thành công: {dest_path}\n")
+                                def update_ui():
+                                    self.a2l_actual_var.set(dest_path)
+                                    msg = f"Đã giải nén {a2l_filename} thành công: {dest_path}"
+                                    messagebox.showinfo("A2L", msg)
+                                    self.append_info_text(f"[A2L] {msg}\n")
+                                self.root.after(0, update_ui)
                                 found = True
                                 break
                     elif archive_path.lower().endswith('.7z'):
                         import py7zr
                         with py7zr.SevenZipFile(archive_path, 'r') as zf:
+                            # Tìm tất cả file có tên kết thúc bằng a2l_filename (không phân biệt hoa thường)
                             all_files = zf.getnames()
-                            a2l_files = [f for f in all_files if os.path.basename(f).lower() == a2l_filename.lower()]
+                            a2l_files = [f for f in all_files if f.lower().endswith(a2l_filename.lower())]
                             if a2l_files:
-                                a2l_file = a2l_files[0]
-                                self.append_info_text(f"[A2L] Đang giải nén {a2l_file}...\n")
+                                # Ưu tiên file có tên chính xác, nếu không thì lấy file đầu tiên
+                                a2l_file = None
+                                for f in a2l_files:
+                                    if os.path.basename(f).lower() == a2l_filename.lower():
+                                        a2l_file = f
+                                        break
+                                if not a2l_file:
+                                    a2l_file = a2l_files[0]
+                                
+                                self.append_info_text(f"[A2L] Tìm thấy {len(a2l_files)} file .a2l, đang giải nén: {a2l_file}...\n")
                                 zf.extract(targets=[a2l_file], path=a2l_folder)
-                                self.root.after(0, lambda: self.a2l_actual_var.set(os.path.join(a2l_folder, os.path.basename(a2l_file))))
-                                self.append_info_text(f"[A2L] Đã giải nén thành công: {os.path.join(a2l_folder, os.path.basename(a2l_file))}\n")
+                                final_path = os.path.join(a2l_folder, os.path.basename(a2l_file))
+                                # Copy to dest_path to ensure correct filename
+                                if final_path != dest_path:
+                                    shutil.move(final_path, dest_path)
+                                def update_ui():
+                                    self.a2l_actual_var.set(dest_path)
+                                    msg = f"Đã giải nén {a2l_filename} thành công: {dest_path}"
+                                    messagebox.showinfo("A2L", msg)
+                                    self.append_info_text(f"[A2L] {msg}\n")
+                                self.root.after(0, update_ui)
                                 found = True
                                 break
                 except Exception as e:
@@ -1225,11 +1573,12 @@ class MF4ImporterGUI:
             import shutil
             import os
             import json
-            self.append_info_text("[SCOM] Bắt đầu tìm kiếm file SCOM trong .zip...\n")
+            self.append_info_text("[SCOM] Bắt đầu tìm kiếm file SCOM trong .zip/.7z...\n")
             delivery_path = self.delivery_var.get().strip()
             project = self.project_var.get().strip()
             variant = self.variant_var.get().strip()
             release = self.release_var.get().strip()
+            
             if not project or not variant or not release:
                 self.root.after(0, lambda: messagebox.showerror("Lỗi", "Không thể phân tích được project/variant/release từ đường dẫn!"))
                 self.append_info_text("[SCOM] Không thể phân tích project/variant/release từ đường dẫn.\n")
@@ -1240,52 +1589,86 @@ class MF4ImporterGUI:
             scom_filename = "scom.xml"
             dest_path = os.path.join(scom_folder, scom_filename)
             
-            # Nếu chưa có file, thực hiện giải nén như cũ
-            if os.path.isfile(delivery_path) and delivery_path.lower().endswith('.zip'):
-                zip_files = [delivery_path]
-                self.append_info_text(f"[SCOM] Đang kiểm tra file zip: {delivery_path}\n")
-            elif os.path.isdir(delivery_path):
-                zip_files = glob.glob(os.path.join(delivery_path, '*.zip'))
-                self.append_info_text(f"[SCOM] Đang kiểm tra {len(zip_files)} file zip trong thư mục: {delivery_path}\n")
-            else:
-                self.root.after(0, lambda: messagebox.showerror("Lỗi", "Đường dẫn không hợp lệ!"))
-                self.append_info_text("[SCOM] Đường dẫn không hợp lệ!\n")
-                return
+            # Tìm cả .zip và .7z
+            search_folders = [delivery_path] if os.path.isdir(delivery_path) else [os.path.dirname(delivery_path)]
+            archive_files = []
+            for folder in search_folders:
+                archive_files.extend(glob.glob(os.path.join(folder, '*.zip')))
+                archive_files.extend(glob.glob(os.path.join(folder, '*.7z')))
+            if os.path.isfile(delivery_path) and (delivery_path.lower().endswith('.zip') or delivery_path.lower().endswith('.7z')):
+                archive_files.insert(0, delivery_path)
+            self.append_info_text(f"[SCOM] Đang kiểm tra {len(archive_files)} file zip/7z trong thư mục: {delivery_path}\n")
             found = False
-            for zip_path in zip_files:
+            for archive_path in archive_files:
                 try:
-                    self.append_info_text(f"[SCOM] Đọc file zip: {zip_path}\n")
-                    with zipfile.ZipFile(zip_path, 'r') as zf:
-                        scom_files = [f for f in zf.namelist() if os.path.basename(f).lower() == scom_filename.lower()]
-                        if scom_files:
-                            scom_file = scom_files[0]
-                            self.append_info_text(f"[SCOM] Đang giải nén {scom_file}...\n")
-                            with zf.open(scom_file) as src, open(dest_path, 'wb') as dst:
-                                shutil.copyfileobj(src, dst)
-                            def update_ui():
-                                self.scom_actual_var.set(dest_path)
-                                msg = f"Đã copy {scom_filename} vào: {dest_path}"
-                                messagebox.showinfo("Thành công", msg)
-                                self.append_info_text(f"[SCOM] {msg}\n")
-                            self.root.after(0, update_ui)
-                            found = True
-                            break
-                        else:
-                            self.append_info_text(f"[SCOM] Không tìm thấy {scom_filename} trong {zip_path}\n")
+                    self.append_info_text(f"[SCOM] Đọc file archive: {archive_path}\n")
+                    if archive_path.lower().endswith('.zip'):
+                        import zipfile
+                        with zipfile.ZipFile(archive_path, 'r') as zf:
+                            # Tìm tất cả file có tên kết thúc bằng scom.xml (không phân biệt hoa thường)
+                            all_files = zf.namelist()
+                            scom_files = [f for f in all_files if f.lower().endswith('scom.xml')]
+                            if scom_files:
+                                # Ưu tiên file có tên chính xác là scom.xml, nếu không thì lấy file đầu tiên
+                                scom_file = None
+                                for f in scom_files:
+                                    if os.path.basename(f).lower() == 'scom.xml':
+                                        scom_file = f
+                                        break
+                                if not scom_file:
+                                    scom_file = scom_files[0]
+                                
+                                self.append_info_text(f"[SCOM] Tìm thấy {len(scom_files)} file scom.xml, đang giải nén: {scom_file}...\n")
+                                with zf.open(scom_file) as src, open(dest_path, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                                def update_ui():
+                                    self.scom_actual_var.set(dest_path)
+                                    msg = f"Đã giải nén {scom_filename} thành công: {dest_path}"
+                                    messagebox.showinfo("SCOM", msg)
+                                    self.append_info_text(f"[SCOM] {msg}\n")
+                                self.root.after(0, update_ui)
+                                found = True
+                                break
+                    elif archive_path.lower().endswith('.7z'):
+                        import py7zr
+                        with py7zr.SevenZipFile(archive_path, 'r') as zf:
+                            # Tìm tất cả file có tên kết thúc bằng scom.xml (không phân biệt hoa thường)
+                            all_files = zf.getnames()
+                            scom_files = [f for f in all_files if f.lower().endswith('scom.xml')]
+                            if scom_files:
+                                # Ưu tiên file có tên chính xác là scom.xml, nếu không thì lấy file đầu tiên
+                                scom_file = None
+                                for f in scom_files:
+                                    if os.path.basename(f).lower() == 'scom.xml':
+                                        scom_file = f
+                                        break
+                                if not scom_file:
+                                    scom_file = scom_files[0]
+                                
+                                self.append_info_text(f"[SCOM] Tìm thấy {len(scom_files)} file scom.xml, đang giải nén: {scom_file}...\n")
+                                zf.extract(targets=[scom_file], path=scom_folder)
+                                final_path = os.path.join(scom_folder, os.path.basename(scom_file))
+                                # Copy to dest_path to ensure correct filename
+                                if final_path != dest_path:
+                                    shutil.move(final_path, dest_path)
+                                def update_ui():
+                                    self.scom_actual_var.set(dest_path)
+                                    msg = f"Đã giải nén {scom_filename} thành công: {dest_path}"
+                                    messagebox.showinfo("SCOM", msg)
+                                    self.append_info_text(f"[SCOM] {msg}\n")
+                                self.root.after(0, update_ui)
+                                found = True
+                                break
                 except Exception as e:
-                    self.root.after(0, lambda: messagebox.showerror("Lỗi", f"Không thể đọc file zip: {zip_path}\n{e}"))
-                    self.root.after(0, lambda: self.append_info_text(f"[SCOM] Lỗi đọc zip: {zip_path} - {e}\n"))
-                    return
+                    self.append_info_text(f"[SCOM] Lỗi khi đọc {archive_path}: {e}\n")
             if not found:
-                def not_found():
-                    msg = f"Không tìm thấy file {scom_filename} trong các file .zip!"
-                    messagebox.showerror("Lỗi", msg)
-                    self.append_info_text(f"[SCOM] {msg}\n")
-                self.root.after(0, not_found)
+                self.root.after(0, lambda: messagebox.showerror("SCOM", "Không tìm thấy file scom.xml phù hợp trong các archive!"))
+                self.append_info_text("[SCOM] Không tìm thấy file scom.xml phù hợp trong các archive.\n")
         threading.Thread(target=worker, daemon=True).start()
 
     def run_python_in_conda_env(python_path, script_path, terminal_callback, done_callback=None):
         def run_cmd():
+
             terminal_callback(f"Đang chạy: {python_path} {script_path}\n")
             try:
                 proc = subprocess.Popen([python_path, script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
@@ -1320,12 +1703,116 @@ class MF4ImporterGUI:
         else:
             messagebox.showerror("Open Folder", "Không tìm thấy file A2L để mở thư mục.")
 
+    def choose_buildtime_file(self):
+        """Choose buildtime XML file"""
+        file_path = filedialog.askopenfilename(
+            filetypes=[("XML files", "*.xml"), ("All files", "*.*")],
+            title="Select Buildtime XML File"
+        )
+        if file_path:
+            self.buildtime_var.set(file_path)
+            self.buildtime_entry.config(fg="black")
+
+    def open_buildtime_folder(self):
+        """Open folder containing buildtime XML file"""
+        path = self.buildtime_var.get().strip()
+        if path and os.path.isfile(path):
+            folder = os.path.dirname(path)
+            try:
+                subprocess.Popen(["explorer", folder])
+            except Exception as e:
+                messagebox.showerror("Open Folder", f"Không thể mở thư mục: {e}")
+        else:
+            messagebox.showerror("Open Folder", "Không tìm thấy file Buildtime để mở thư mục.")
+
     def append_info_text(self, text):
         # Chỉ cần insert từng dòng, Text widget sẽ tự động wrap theo chiều rộng hiện tại
         lines = text.splitlines()
         for line in lines:
             self.terminal_text.insert(tk.END, line + '\n')
         self.terminal_text.see(tk.END)
+
+    def kill_all_tasks(self):
+        """Kill tất cả các task/process đang chạy trong background"""
+        import subprocess
+        from tkinter import messagebox
+        
+        try:
+            killed_count = 0
+            
+            if psutil:
+                # Sử dụng psutil nếu có
+                current_pid = os.getpid()  # PID của GUI hiện tại
+                
+                # Lấy tất cả processes con của GUI này
+                current_process = psutil.Process(current_pid)
+                children = current_process.children(recursive=True)
+                
+                for child in children:
+                    try:
+                        # Kill process con
+                        child.terminate()
+                        child.wait(timeout=3)  # Đợi 3 giây để process tự thoát
+                        killed_count += 1
+                        self.append_info_text(f"[KILL] Terminated process: {child.pid} - {child.name()}\n")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                        try:
+                            # Force kill nếu terminate không work
+                            child.kill()
+                            killed_count += 1
+                            self.append_info_text(f"[KILL] Force killed process: {child.pid}\n")
+                        except:
+                            pass
+                
+                # Kill các process liên quan đến selena, python, toolbox
+                suspicious_names = ['selena.exe', 'python.exe', 'selena-toolbox']
+                for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                    try:
+                        if proc.info['pid'] == current_pid:
+                            continue  # Không kill chính GUI
+                        
+                        name = proc.info['name'].lower()
+                        cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
+                        
+                        # Kiểm tra nếu là process của selena toolbox
+                        if any(sus in name for sus in suspicious_names) or 'selena-toolbox' in cmdline:
+                            proc.terminate()
+                            proc.wait(timeout=3)
+                            killed_count += 1
+                            self.append_info_text(f"[KILL] Terminated suspicious process: {proc.info['pid']} - {name}\n")
+                    except:
+                        pass
+            else:
+                # Fallback: sử dụng taskkill command
+                self.append_info_text("[KILL] psutil not available, using taskkill command...\n")
+                suspicious_processes = ['selena.exe', 'python.exe']
+                
+                for proc_name in suspicious_processes:
+                    try:
+                        result = subprocess.run(['taskkill', '/f', '/im', proc_name], 
+                                              capture_output=True, text=True, check=False)
+                        if result.returncode == 0:
+                            killed_count += 1
+                            self.append_info_text(f"[KILL] Killed all {proc_name} processes\n")
+                        else:
+                            self.append_info_text(f"[KILL] No {proc_name} processes found or failed to kill\n")
+                    except Exception as e:
+                        self.append_info_text(f"[KILL] Error killing {proc_name}: {e}\n")
+            
+            self.append_info_text(f"[KILL] Task killing completed. Terminated {killed_count} processes.\n")
+            messagebox.showinfo("Kill Tasks", f"Đã kill {killed_count} task đang chạy.")
+            
+        except Exception as e:
+            self.append_info_text(f"[KILL] Error during task killing: {e}\n")
+            messagebox.showerror("Kill Tasks", f"Lỗi khi kill tasks: {e}")
+
+    def clear_console(self):
+        """Xóa toàn bộ nội dung console"""
+        try:
+            self.terminal_text.delete(1.0, tk.END)
+            self.append_info_text("[CONSOLE] Console cleared.\n")
+        except Exception as e:
+            print(f"Error clearing console: {e}")
 
     def choose_mf4_file(self):
         # Mở File Explorer để chọn file .mf4
@@ -1335,6 +1822,28 @@ class MF4ImporterGUI:
             # Cập nhật đường dẫn file vào mf4_var và hiển thị trong mf4_entry
             self.mf4_var.set(file_path)
             self.mf4_entry.config(fg="black")
+
+    def choose_mf4_02_file(self):
+        # Mở File Explorer để chọn file .mf4 thứ 2
+        file_path = filedialog.askopenfilename(filetypes=[("MF4 files", "*.mf4"), ("All files", "*.*")], title="Select MF4 02 File")
+        
+        if file_path:
+            # Cập nhật đường dẫn file vào mf4_02_var và hiển thị trong mf4_02_entry
+            self.mf4_02_var.set(file_path)
+            self.mf4_02_entry.config(fg="black")
+
+    def open_mf4_02_file(self):
+        current_file_path = self.mf4_02_var.get().strip()
+        if current_file_path and os.path.isfile(current_file_path):
+            folder_path = os.path.dirname(current_file_path)
+            os.startfile(folder_path)
+        else:
+            file_path = filedialog.askopenfilename(filetypes=[("MF4 files", "*.mf4"), ("All files", "*.*")], title="Select MF4 02 File")
+            if file_path:
+                self.mf4_02_var.set(file_path)
+                self.mf4_02_entry.config(fg="black")
+                folder_path = os.path.dirname(file_path)
+                os.startfile(folder_path)
 
     def save_all_paths(self, *args):
         # Lưu tất cả các biến path_vars vào all_paths.json, bao gồm run_order và selena_env
@@ -1361,8 +1870,7 @@ class MF4ImporterGUI:
         data[key] = {k: v.get() for k, v in self.path_vars.items()}
         # Lưu thêm trường selena_env
         data[key]["selena_env"] = self.selected_env_var.get()
-        # Lưu thêm trường a2l_actual
-        data[key]["a2l_actual"] = self.a2l_actual_var.get()
+
         try:
             with open(all_paths_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -1385,6 +1893,7 @@ class MF4ImporterGUI:
             return
         # Hiển thị dialog chọn/xoà/duplicate
         top = tk.Toplevel(self.root)
+        self.set_window_icon(top)
         top.title("Quản lý All Paths")
         tk.Label(top, text="Chọn các path muốn thao tác:").pack(padx=10, pady=5)
         listbox = tk.Listbox(top, selectmode=tk.MULTIPLE, width=60, height=10)
@@ -1403,9 +1912,13 @@ class MF4ImporterGUI:
             for field, var in self.path_vars.items():
                 if field in v:
                     var.set(v[field])
+            
+            # Backward compatibility: migrate old "scom" to "scom_actual"
+            if "scom" in v and ("scom_actual" not in v or not v["scom_actual"]):
+                self.scom_actual_var.set(v["scom"])
+            
             # Điền các trường đặc biệt
             self.selected_env_var.set(v.get("selena_env", ""))
-            self.a2l_actual_var.set(v.get("a2l_actual", ""))
             messagebox.showinfo("Load Path", f"Đã nạp thông tin từ: {k}")
             top.destroy()
         def delete_selected():
@@ -1443,14 +1956,32 @@ class MF4ImporterGUI:
         exe_path = os.path.normpath(self.selena_exe_var.get().strip())
         runtime_xml = os.path.normpath(self.runtime_var.get().strip())
         mf4_path = os.path.normpath(self.mf4_var.get().strip())
-        # Output MF4 và log file sẽ đặt cùng thư mục với MF4, thêm _output
+        mf4_02_path = os.path.normpath(self.mf4_02_var.get().strip())  # Thêm MF4 thứ 2
+        adapter_path = os.path.normpath(self.adapter_file_var.get().strip())  # Adapter 1
+        adapter_02_path = os.path.normpath(self.adapter_02_var.get().strip())  # Adapter 2
+        
+        # Tạo output directory dựa trên tên MF4
         if mf4_path:
             base, ext = os.path.splitext(mf4_path)
-            output_mf4 = os.path.normpath(base + '_output' + ext)
-            output_log = os.path.normpath(base + '_log.txt')
+            mf4_name = os.path.basename(base)
+            mf4_dir = os.path.dirname(mf4_path)
+            
+            # Tạo output folder: output_<mdf_name>
+            output_folder = os.path.join(mf4_dir, f"output_{mf4_name}")
+            os.makedirs(output_folder, exist_ok=True)
+            
+            # Đặt tất cả output files trong output folder
+            output_mf4 = os.path.join(output_folder, f"{mf4_name}_output{ext}")
+            output_log = os.path.join(output_folder, f"{mf4_name}_simulation.log")
+            command_log = os.path.join(output_folder, f"{mf4_name}_command.txt")
+            config_backup = os.path.join(output_folder, f"{mf4_name}_config.json")
         else:
             output_mf4 = ''
             output_log = ''
+            command_log = ''
+            config_backup = ''
+            output_folder = ''
+            
         source = self.source_var.get().strip() or 'RadarFC'
         # plugins_dir là folder chứa exe_path/plugins
         plugins_dir = os.path.normpath(os.path.join(os.path.dirname(exe_path), 'plugins'))
@@ -1462,13 +1993,78 @@ class MF4ImporterGUI:
         conda_envs_dir = os.path.normpath(os.path.join(user_home, ".conda", "envs"))
         env_path = os.path.normpath(os.path.join(conda_envs_dir, env_name))
         python_path = os.path.normpath(os.path.join(env_path, "python.exe"))
+        
         # Build command
         cmd = (
             f'"{exe_path}" -c "{runtime_xml}" --i_mdfplayer "{mf4_path}" -o "{output_mf4}" '
             f'--enable-doorkeeper --enable-multibuffer-border --nogui -l "{output_log}" -s {source} '
             f'--userparam {userparam} --plugins_directory "{plugins_dir}"'
         )
+        
+        # Thêm adapter cho MF4 Player 1
+        if adapter_path and os.path.isfile(adapter_path):
+            cmd += f' -a "{adapter_path}"'
+        
+        # Thêm --i_mdfplayer02 nếu có MF4 thứ 2
+        if mf4_02_path and os.path.isfile(mf4_02_path):
+            cmd += f' --i_mdfplayer02 "{mf4_02_path}"'
+            
+        # Thêm --a_mdfplayer02 nếu có adapter cho MF4 thứ 2
+        if adapter_02_path and os.path.isfile(adapter_02_path):
+            cmd += f' --a_mdfplayer02 "{adapter_02_path}"'
         def run():
+            # Lưu command và configuration info
+            if output_folder:
+                try:
+                    # Lưu command được chạy
+                    with open(command_log, 'w', encoding='utf-8') as f:
+                        f.write(f"[SIMULATION COMMAND]\n")
+                        f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                        f.write(f"Command: {cmd}\n\n")
+                        f.write(f"[CONFIGURATION]\n")
+                        f.write(f"Selena EXE: {exe_path}\n")
+                        f.write(f"Runtime XML: {runtime_xml}\n")
+                        f.write(f"Input MF4: {mf4_path}\n")
+                        if adapter_path and os.path.isfile(adapter_path):
+                            f.write(f"Adapter 1: {adapter_path}\n")
+                        if mf4_02_path and os.path.isfile(mf4_02_path):
+                            f.write(f"Input MF4 02: {mf4_02_path}\n")
+                        if adapter_02_path and os.path.isfile(adapter_02_path):
+                            f.write(f"Adapter 2: {adapter_02_path}\n")
+                        f.write(f"Output MF4: {output_mf4}\n")
+                        f.write(f"Log File: {output_log}\n")
+                        f.write(f"Source: {source}\n")
+                        f.write(f"Plugins Dir: {plugins_dir}\n")
+                        f.write(f"User Param: {userparam}\n")
+                        f.write(f"Conda Env: {env_name}\n")
+                        f.write(f"Output Folder: {output_folder}\n")
+                    
+                    # Lưu toàn bộ configuration từ GUI
+                    config_data = {
+                        "simulation_info": {
+                            "timestamp": datetime.now().isoformat(),
+                            "mf4_name": mf4_name,
+                            "output_folder": output_folder
+                        },
+                        "paths": {k: v.get() for k, v in self.path_vars.items()},
+                        "settings": {
+                            "selena_env": self.selected_env_var.get(),
+                            "source": source,
+                            "userparam": userparam
+                        },
+                        "command": cmd
+                    }
+                    
+                    with open(config_backup, 'w', encoding='utf-8') as f:
+                        json.dump(config_data, f, ensure_ascii=False, indent=2)
+                    
+                    self.append_info_text(f"[SIM] Created output folder: {output_folder}\n")
+                    self.append_info_text(f"[SIM] Command saved to: {command_log}\n")
+                    self.append_info_text(f"[SIM] Config backed up to: {config_backup}\n")
+                    
+                except Exception as e:
+                    self.append_info_text(f"[SIM] Warning: Could not save info files: {e}\n")
+            
             self.append_info_text(f"[SIM] Running: {cmd}\n")
             # Nếu có conda env, chạy trong conda env
             activate = os.path.normpath(os.path.join(env_path, "Scripts", "activate.bat"))
@@ -1478,11 +2074,32 @@ class MF4ImporterGUI:
                 full_cmd = cmd
             try:
                 proc = subprocess.Popen(full_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                
+                # Capture output và lưu vào file
+                output_lines = []
                 for line in proc.stdout:
+                    output_lines.append(line)
                     self.root.after(0, lambda l=line: self.append_info_text(l))
+                
                 proc.wait()
+                
+                # Lưu full output vào file
+                if output_folder and output_lines:
+                    try:
+                        full_output_log = os.path.join(output_folder, f"{mf4_name}_full_output.log")
+                        with open(full_output_log, 'w', encoding='utf-8') as f:
+                            f.write(f"[SIMULATION OUTPUT]\n")
+                            f.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"Return Code: {proc.returncode}\n\n")
+                            f.writelines(output_lines)
+                        self.append_info_text(f"[SIM] Full output saved to: {full_output_log}\n")
+                    except Exception as e:
+                        self.append_info_text(f"[SIM] Warning: Could not save output log: {e}\n")
+                
                 if proc.returncode == 0:
                     self.root.after(0, lambda: self.append_info_text("[SIM] Simulation completed successfully.\n"))
+                    if output_folder:
+                        self.root.after(0, lambda: self.append_info_text(f"[SIM] All outputs saved in: {output_folder}\n"))
                 else:
                     self.root.after(0, lambda: self.append_info_text(f"[SIM] Simulation failed with code {proc.returncode}.\n"))
             except Exception as e:
@@ -1522,8 +2139,10 @@ class MF4ImporterGUI:
             json_path = os.path.join(self.json_var.get().strip()).replace("\\", "/")
             #path to selena.exe
             exe_path = os.path.normpath(self.selena_exe_var.get().strip()).replace("\\", "/")
+            #path to source 
+            source_var_path = os.path.normpath(self.source_var.get().strip()).replace("\\", "/")
             #path to repo 
-            repo_path = os.path.normpath(self.repo_path_var.get().strip()).replace("\\", "/")
+            repo_path = self.repo_path_var.get().strip()
             #path to mf4 file
             mf4_path = self.mf4_var.get().strip().replace("\\", "/") if self.mf4_var.get().strip() else ""
             mf4_name = os.path.splitext(os.path.basename(mf4_path))[0] if mf4_path else "AEB"
@@ -1533,10 +2152,8 @@ class MF4ImporterGUI:
 
             # testplan_creation
             testplan_creation = {
-                "comparer_type": "comparer_jenkins",   
+                "comparer_type": "comparer",   
                 "ignore_signals": [
-                    ".*m_sequenceNumber.*",
-                    ".*m_referenceCounter.*",
                     ".*m_systemTime.*",
                     ".*freeHeadOffset.*"
                 ],
@@ -1546,7 +2163,8 @@ class MF4ImporterGUI:
                 "selena_args": "--enable-multibuffer-border --enable-doorkeeper",
                 "selena_path": os.path.normpath(os.path.dirname(exe_path)).replace("\\", "/") if exe_path else "",
                 "testplan_path": os.path.join(Justin_path, "testplan_path").replace("\\", "/"),
-                "tolerance": 1e-5                           
+                "tolerance": 1e-5,
+                "source" : source_var_path                 
             }
             # runtime_creation
             runtime_creation = {
@@ -1586,16 +2204,7 @@ class MF4ImporterGUI:
                 json.dump(template, f, ensure_ascii=False, indent=2)
             self.runnable_level_var.set(out_file)
 
-            # --- Copy Runnable_Level/.../runtimes to Justin/.../runtimes ---
-            src_runtimes = os.path.join(base_folder, "Runnable_Level", project, variant, release, "runtimes")
-            dst_runtimes = os.path.join(base_folder, "Justin", project, variant, release, "runtimes")
-            if os.path.isdir(src_runtimes):
-                # Remove destination if exists, then copy
-                if os.path.exists(dst_runtimes):
-                    shutil.rmtree(dst_runtimes)
-                shutil.copytree(src_runtimes, dst_runtimes)
-
-            messagebox.showinfo("Thành công", f"Đã tạo file runnable_level.json hoàn chỉnh tại:\n{out_file}\nĐã copy runtimes sang: {dst_runtimes}")
+            messagebox.showinfo("Thành công", f"Đã tạo file runnable_level.json hoàn chỉnh tại:\n{out_file}\n")
         except Exception as e:
             messagebox.showerror("Lỗi", f"Không thể tạo file template: {e}")
 
@@ -1626,11 +2235,28 @@ class MF4ImporterGUI:
                 if not runnable_level_path or not os.path.isfile(runnable_level_path):
                     self.append_info_text("[Gen testplan] Vui lòng tạo file runnable_level.json trước!\n")
                     return
+                # Lấy tên file MF4 để tạo folder output
+                mf4_path = self.mf4_var.get().strip()
+                if not mf4_path or not os.path.isfile(mf4_path):
+                    self.append_info_text("[Gen testplan] Vui lòng chọn đúng file MF4!\n")
+                    return
+                
+                mf4_name = os.path.splitext(os.path.basename(mf4_path))[0]  # Lấy tên file không có extension
+                
                 project = self.project_var.get().strip()
                 variant = self.variant_var.get().strip()
                 release = self.release_var.get().strip()
                 base_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                
+                # Tạo folder output với tên MF4
+                output_folder = os.path.join(base_folder, "Justin", project, variant, release, f"output_{mf4_name}")
+                os.makedirs(output_folder, exist_ok=True)
+                
+                # Tạo Justin_path để chứa scripts
                 Justin_path = os.path.join(base_folder, "Justin", project, variant, release).replace("\\", "/")
+                
+                self.append_info_text(f"[Gen testplan] Tạo folder output: {output_folder}\n")
+                
                 cmd = [
                     python_path,
                     selena_toolbox_py,
@@ -1651,6 +2277,80 @@ class MF4ImporterGUI:
             except Exception as e:
                 self.append_info_text(f"[Gen testplan] Lỗi khi chạy Gen testplan: {e}\n")
         threading.Thread(target=worker, daemon=True).start()
+
+    def open_gen_testplan_action(self):
+        """Mở thư mục output testplan để xem kết quả Gen testplan"""
+        try:
+            project = self.project_var.get().strip()
+            variant = self.variant_var.get().strip()
+            release = self.release_var.get().strip()
+            
+            if not all([project, variant, release]):
+                self.append_info_text("[OPEN Gen testplan] Vui lòng chọn đầy đủ Project, Variant, Release!\n")
+                return
+            
+            base_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            justin_folder = os.path.join(base_folder, "Justin", project, variant, release)
+            
+            if not os.path.exists(justin_folder):
+                self.append_info_text(f"[OPEN Gen testplan] Không tìm thấy thư mục Justin: {justin_folder}\n")
+                return
+            
+            # Tìm các folder output_* trong justin_folder
+            output_folders = []
+            for item in os.listdir(justin_folder):
+                item_path = os.path.join(justin_folder, item)
+                if os.path.isdir(item_path) and item.startswith("output_"):
+                    output_folders.append(item_path)
+            
+            if not output_folders:
+                # Nếu không có folder output_, mở thư mục testplan_path cũ
+                testplan_folder = os.path.join(justin_folder, "testplan_path")
+                if os.path.exists(testplan_folder):
+                    subprocess.run(['explorer', testplan_folder], check=True)
+                    self.append_info_text(f"[OPEN Gen testplan] Đã mở thư mục testplan_path: {testplan_folder}\n")
+                else:
+                    self.append_info_text("[OPEN Gen testplan] Không tìm thấy folder output hoặc testplan_path!\n")
+                return
+            
+            if len(output_folders) == 1:
+                # Chỉ có 1 folder output, mở luôn
+                folder_to_open = output_folders[0]
+                subprocess.run(['explorer', folder_to_open], check=True)
+                self.append_info_text(f"[OPEN Gen testplan] Đã mở thư mục: {folder_to_open}\n")
+            else:
+                # Có nhiều folder output, hiển thị dialog để chọn
+                from tkinter import simpledialog
+                
+                top = tk.Toplevel(self.root)
+                self.set_window_icon(top)
+                top.title("Chọn Output Folder")
+                top.geometry("500x300")
+                
+                tk.Label(top, text="Chọn folder output để mở:").pack(padx=10, pady=10)
+                
+                listbox = tk.Listbox(top, width=60, height=10)
+                for folder in output_folders:
+                    folder_name = os.path.basename(folder)
+                    listbox.insert(tk.END, folder_name)
+                listbox.pack(padx=10, pady=5, fill=tk.BOTH, expand=True)
+                
+                def open_selected():
+                    sel = listbox.curselection()
+                    if sel:
+                        selected_folder = output_folders[sel[0]]
+                        subprocess.run(['explorer', selected_folder], check=True)
+                        self.append_info_text(f"[OPEN Gen testplan] Đã mở thư mục: {selected_folder}\n")
+                        top.destroy()
+                
+                tk.Button(top, text="Mở Folder", command=open_selected).pack(pady=10)
+                listbox.bind('<Double-1>', lambda e: open_selected())
+                
+                top.transient(self.root)
+                top.grab_set()
+            
+        except Exception as e:
+            self.append_info_text(f"[OPEN Gen testplan] Lỗi khi mở thư mục: {e}\n")
 
     def split_mf4_file(self):
         from tkinter import messagebox
@@ -1752,6 +2452,129 @@ class MF4ImporterGUI:
             messagebox.showinfo("OLD IMPORT", f"Đã cập nhật runtime.xml: thêm old=\"1\" cho {count} inport (bỏ qua inport newdatacheck, doorkeeper sequence_number, multibuffer sequencenumbersignal). Log: {log_path}")
         except Exception as e:
             messagebox.showerror("OLD IMPORT", f"Lỗi khi xử lý runtime.xml: {e}")
+
+    def gen_missing_signals_action(self):
+        def worker():
+            try:
+                from tkinter import messagebox
+                
+                # Lấy thông tin cơ bản
+                project = self.project_var.get().strip()
+                variant = self.variant_var.get().strip()
+                release = self.release_var.get().strip()
+                mf4_path = self.mf4_var.get().strip()
+                source = self.source_var.get().strip() or "RadarFC"
+                
+                if not project or not variant or not release:
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng nhập đầy đủ Project, Variant, Release!"))
+                    return
+                    
+                if not mf4_path or not os.path.isfile(mf4_path):
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn file MF4 hợp lệ!"))
+                    return
+                
+                # Đường dẫn MF4 và thư mục chứa
+                mf4_dir = os.path.dirname(mf4_path)
+                mf4_name = os.path.splitext(os.path.basename(mf4_path))[0]
+                
+                # Input file (MissingSignals.txt)
+                missing_signals_input = os.path.join(mf4_dir, f"{mf4_name}_log.txt_MissingSignals.txt")
+                
+                # Output directory - tạo nếu chưa có
+                output_dir = os.path.join(mf4_dir, "MissingSignal_Report")
+                os.makedirs(output_dir, exist_ok=True)
+                
+                # Runtime.xml file từ runtime_var
+                runtime_xml = self.runtime_var.get().strip()
+                if not runtime_xml or not os.path.isfile(runtime_xml):
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn file Runtime.xml hợp lệ!"))
+                    return
+                
+                # Repo path
+                repo_path = self.repo_path_var.get().strip()
+                if not repo_path:
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn Repository!"))
+                    return
+                
+                # Blacklist file (từ repo)
+                blacklist_file = os.path.join(repo_path, f"{project}_apl", "selena", "config", "json", "Missing_Signal", "blacklist.txt")
+                
+                # A2L table file
+                a2l_table_file = self.a2l_table_var.get().strip()
+                if not a2l_table_file:
+                    # Fallback: build from repo
+                    a2l_table_file = os.path.join(repo_path, f"{project}_apl", "selena", "config", "mapping", f"a2lTable_{variant}.txt")
+                
+                # Buildtime file - từ GUI input
+                buildtime_file = self.buildtime_var.get().strip()
+                if not buildtime_file or not os.path.isfile(buildtime_file):
+                    # Fallback: build from repo
+                    buildtime_file = os.path.join(repo_path, f"{project}_apl", "selena", "config", "buildtime", f"{project}_1R1V_{variant}.xml")
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN_Missing_Signals] Buildtime not set, using fallback: {buildtime_file}\n"))
+                else:
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN_Missing_Signals] Using buildtime from GUI: {buildtime_file}\n"))
+                
+                # Toolbox path
+                toolbox_path = self.toolbox_var.get().strip()
+                if not toolbox_path:
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn Selena Toolbox!"))
+                    return
+                
+                # Python path
+                env_name = self.selected_env_var.get().strip()
+                if not env_name:
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Vui lòng chọn Conda Environment!"))
+                    return
+                
+                user_home = os.path.expanduser('~')
+                conda_envs_dir = os.path.join(user_home, ".conda", "envs")
+                env_path = os.path.join(conda_envs_dir, env_name)
+                python_path = os.path.join(env_path, "python.exe")
+                
+                # Kiểm tra file input
+                if not os.path.isfile(missing_signals_input):
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", f"Không tìm thấy file MissingSignals:\n{missing_signals_input}"))
+                    return
+                
+                # Build command
+                cmd = [
+                    python_path, "-u", toolbox_path, "missing-signals", "analyze",
+                    missing_signals_input,
+                    "-o", output_dir,
+                    "-b", blacklist_file,
+                    "-m", mf4_path,
+                    "-a2l", a2l_table_file,
+                    "-s", source,
+                    "-r", runtime_xml,
+                    "-bt", buildtime_file
+                ]
+                
+                self.root.after(0, lambda: self.append_info_text(f"[GEN_Missing_Signals] Bắt đầu phân tích Missing Signals...\n"))
+                self.root.after(0, lambda: self.append_info_text(f"[COMMAND] {' '.join(cmd)}\n"))
+                
+                # Chạy command
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+                                         text=True, bufsize=1, universal_newlines=True)
+                
+                # Đọc output real-time
+                for line in iter(process.stdout.readline, ''):
+                    if line.strip():
+                        self.root.after(0, lambda line=line: self.append_info_text(line))
+                
+                process.wait()
+                
+                if process.returncode == 0:
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN_Missing_Signals] Hoàn thành! Kết quả tại: {output_dir}\n"))
+                    self.root.after(0, lambda: messagebox.showinfo("Thành công", f"Phân tích Missing Signals hoàn thành!\nKết quả: {output_dir}"))
+                else:
+                    self.root.after(0, lambda: self.append_info_text(f"[GEN_Missing_Signals] Lỗi với exit code: {process.returncode}\n"))
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", f"Missing Signals analysis failed với exit code: {process.returncode}"))
+                    
+            except Exception as e:
+                self.root.after(0, lambda e=e: self.append_info_text(f"[GEN_Missing_Signals] Exception: {e}\n"))
+                self.root.after(0, lambda e=e: messagebox.showerror("Lỗi", f"Lỗi khi chạy Missing Signals analysis: {e}"))
+        
+        threading.Thread(target=worker, daemon=True).start()
 
 def run_gui():
     root = tk.Tk()
