@@ -63,8 +63,68 @@ class MF4ImporterGUI:
         right_frame = tk.Frame(paned_window, bg='#f0f0f0')
         paned_window.add(right_frame, minsize=400, stretch="always")
 
+        # Memory & Sequence Generation Section (always visible in right panel)
+        mem_seq_section = tk.LabelFrame(right_frame, text="Memory & Sequence Generation", font=("Arial", 11, "bold"), padx=10, pady=8, bg='#f0f0f0')
+        mem_seq_section.pack(fill=tk.X, pady=(0, 10))
+
+        # Generate button and options
+        gen_controls_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        gen_controls_frame.pack(fill=tk.X, pady=(0, 8))
+        self.gen_button = tk.Button(gen_controls_frame, text="Generate Mem&Sequence", command=self.gen_mem_sequence, font=("Arial", 10, "bold"), bg='#2196F3', fg='white', height=2)
+        self.gen_button.pack(fill=tk.X)
+
+        # Options checkboxes
+        option_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        option_frame.pack(fill=tk.X, pady=(5, 0))
+        tk.Label(option_frame, text="Options:", bg='#f0f0f0', font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        self.ticket_vars = {
+            'ALL': tk.BooleanVar(value=True),
+            'sequence': tk.BooleanVar(value=False),
+            'mempool': tk.BooleanVar(value=False),
+            'systemtime': tk.BooleanVar(value=False),
+        }
+        self.ticket_boxes = {}
+        def on_ticket_change(name):
+            if name == 'ALL' and self.ticket_vars['ALL'].get():
+                for k in ['sequence','mempool','systemtime']:
+                    self.ticket_vars[k].set(False)
+            elif name != 'ALL' and self.ticket_vars[name].get():
+                self.ticket_vars['ALL'].set(False)
+        for i, name in enumerate(['ALL','sequence','mempool','systemtime']):
+            cb = tk.Checkbutton(option_frame, text=name, variable=self.ticket_vars[name], command=lambda n=name: on_ticket_change(n), bg='#f0f0f0')
+            cb.pack(side=tk.LEFT, padx=5)
+            self.ticket_boxes[name] = cb
+
+        # Individual file paths within the section
+        paths_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
+        paths_frame.pack(fill=tk.X, pady=(5, 0))
+
+        # Systemtime
+        systemtime_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        systemtime_row.pack(fill=tk.X, pady=2)
+        tk.Label(systemtime_row, text="Systemtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.systemtime_var = tk.StringVar()
+        self.systemtime_entry = tk.Entry(systemtime_row, textvariable=self.systemtime_var)
+        self.systemtime_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+
+        # Sequence
+        sequence_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        sequence_row.pack(fill=tk.X, pady=2)
+        tk.Label(sequence_row, text="Sequence:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.sequence_var = tk.StringVar()
+        self.sequence_entry = tk.Entry(sequence_row, textvariable=self.sequence_var)
+        self.sequence_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+
+        # Mempool
+        mempool_row = tk.Frame(paths_frame, bg='#f0f0f0')
+        mempool_row.pack(fill=tk.X, pady=2)
+        tk.Label(mempool_row, text="Mempool:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.mempool_var = tk.StringVar()
+        self.mempool_entry = tk.Entry(mempool_row, textvariable=self.mempool_var)
+        self.mempool_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+
         # =============================================================================
-        # RUNTIME GENERATION & FILES (moved to top of right panel)
+        # RUNTIME GENERATION & FILES (moved to below Memory & Sequence Generation)
         # =============================================================================
         runtime_frame = tk.LabelFrame(right_frame, text="Runtime Generation & Files", bg='#f0f0f0', pady=5)
         runtime_frame.pack(padx=10, pady=(0, 5), fill=tk.X)
@@ -87,55 +147,50 @@ class MF4ImporterGUI:
         tk.Label(runtime_row, text="Runtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
 
         # Runtime action buttons
-        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=8, command=self.run_gen_runtime, bg='#4CAF50', fg='white')
-        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=6, font=("Arial", 8), command=self.run_gen_runtime, bg='#4CAF50', fg='white')
+        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 1))
 
-        self.old_import_button = tk.Button(runtime_row, text="Import", width=6, command=self.old_import_action)
-        self.old_import_button.pack(side=tk.LEFT, padx=(0, 2))
+        self.old_import_button = tk.Button(runtime_row, text="Import", width=5, font=("Arial", 8), command=self.old_import_action)
+        self.old_import_button.pack(side=tk.LEFT, padx=(0, 1))
 
-        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=6, command=self.choose_runtime_file)
-        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
+        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=5, font=("Arial", 8), command=self.choose_runtime_file)
+        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 1))
 
-        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=6, command=self.open_runtime_file)
-        self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=5, font=("Arial", 8), command=self.open_runtime_file)
+        self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
 
         self.runtime_var = tk.StringVar()
-        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var)
+        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var, font=("Arial", 8), width=12)
         self.runtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # ===== RIGHT PANEL - ACTIONS =====
-        actions_section = tk.LabelFrame(right_frame, text="Actions & Controls", font=("Arial", 11, "bold"), 
-                                       padx=10, pady=10, bg='#f0f0f0')
+        actions_section = tk.LabelFrame(right_frame, text="Actions & Controls", font=("Arial", 11, "bold"), padx=10, pady=10, bg='#f0f0f0')
         actions_section.pack(fill=tk.X, pady=(0, 10))
-        
+
         # Run Order
         run_order_frame = tk.Frame(actions_section, bg='#f0f0f0')
         run_order_frame.pack(fill=tk.X, pady=(0, 8))
         tk.Label(run_order_frame, text="Run Order:", width=15, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.run_order_var = tk.StringVar()
-        self.run_order_button = tk.Button(run_order_frame, text="Select", command=self.run_order_action, width=8)
-        self.run_order_button.pack(side=tk.LEFT, padx=(5, 5))
-        self.run_order_entry = tk.Entry(run_order_frame, textvariable=self.run_order_var)
+        self.run_order_button = tk.Button(run_order_frame, text="Select", command=self.run_order_action, width=6, font=("Arial", 8))
+        self.run_order_button.pack(side=tk.LEFT, padx=(2, 2))
+        self.run_order_entry = tk.Entry(run_order_frame, textvariable=self.run_order_var, font=("Arial", 8), width=12)
         self.run_order_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
+
         # Run Simulation - Make it prominent
         simulation_frame = tk.Frame(actions_section, bg='#f0f0f0')
         simulation_frame.pack(fill=tk.X, pady=(0, 8))
-        self.run_simulation_button = tk.Button(simulation_frame, text=">> Run Simulation", 
-                                             command=self.run_simulation_action, 
-                                             font=("Arial", 10, "bold"), bg='#4CAF50', fg='white', 
-                                             height=2)
+        self.run_simulation_button = tk.Button(simulation_frame, text=">> Run Simulation", command=self.run_simulation_action, font=("Arial", 8, "bold"), bg='#4CAF50', fg='white', height=1)
         self.run_simulation_button.pack(fill=tk.X)
-        
+
         # Runnable Level
         runnable_level_frame = tk.Frame(actions_section, bg='#f0f0f0')
         runnable_level_frame.pack(fill=tk.X, pady=(0, 8))
         tk.Label(runnable_level_frame, text="Runnable Level:", width=15, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
-        self.gen_runnable_level_button = tk.Button(runnable_level_frame, text="Generate", 
-                                                 command=self.gen_runnable_level_template, width=8)
-        self.gen_runnable_level_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.gen_runnable_level_button = tk.Button(runnable_level_frame, text="Generate", command=self.gen_runnable_level_template, width=6, font=("Arial", 8))
+        self.gen_runnable_level_button.pack(side=tk.LEFT, padx=(2, 2))
         self.runnable_level_var = tk.StringVar()
-        self.runnable_level_entry = tk.Entry(runnable_level_frame, textvariable=self.runnable_level_var)
+        self.runnable_level_entry = tk.Entry(runnable_level_frame, textvariable=self.runnable_level_var, font=("Arial", 8), width=12)
         self.runnable_level_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         # Test Plan
@@ -436,19 +491,16 @@ class MF4ImporterGUI:
         self.open_adapter_02_button = tk.Button(adapter_02_frame, text="Open", command=self.open_adapter_02_folder, width=6)
         self.open_adapter_02_button.pack(side=tk.LEFT)
         
-        # Memory & Sequence Generation Section
-        mem_seq_section = tk.LabelFrame(left_frame, text="Memory & Sequence Generation", font=("Arial", 11, "bold"), 
-                                       padx=10, pady=8, bg='#f0f0f0')
+        # Memory & Sequence Generation Section (always visible in right panel)
+        mem_seq_section = tk.LabelFrame(right_frame, text="Memory & Sequence Generation", font=("Arial", 11, "bold"), padx=10, pady=8, bg='#f0f0f0')
         mem_seq_section.pack(fill=tk.X, pady=(0, 10))
-        
+
         # Generate button and options
         gen_controls_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
         gen_controls_frame.pack(fill=tk.X, pady=(0, 8))
-        self.gen_button = tk.Button(gen_controls_frame, text="Generate Mem&Sequence", 
-                                   command=self.gen_mem_sequence, font=("Arial", 10, "bold"), 
-                                   bg='#2196F3', fg='white', height=2)
+        self.gen_button = tk.Button(gen_controls_frame, text="Generate Mem&Sequence", command=self.gen_mem_sequence, font=("Arial", 10, "bold"), bg='#2196F3', fg='white', height=2)
         self.gen_button.pack(fill=tk.X)
-        
+
         # Options checkboxes
         option_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
         option_frame.pack(fill=tk.X, pady=(5, 0))
@@ -467,15 +519,14 @@ class MF4ImporterGUI:
             elif name != 'ALL' and self.ticket_vars[name].get():
                 self.ticket_vars['ALL'].set(False)
         for i, name in enumerate(['ALL','sequence','mempool','systemtime']):
-            cb = tk.Checkbutton(option_frame, text=name, variable=self.ticket_vars[name],
-                               command=lambda n=name: on_ticket_change(n), bg='#f0f0f0')
+            cb = tk.Checkbutton(option_frame, text=name, variable=self.ticket_vars[name], command=lambda n=name: on_ticket_change(n), bg='#f0f0f0')
             cb.pack(side=tk.LEFT, padx=5)
             self.ticket_boxes[name] = cb
-            
+
         # Individual file paths within the section
         paths_frame = tk.Frame(mem_seq_section, bg='#f0f0f0')
         paths_frame.pack(fill=tk.X, pady=(5, 0))
-        
+
         # Systemtime
         systemtime_row = tk.Frame(paths_frame, bg='#f0f0f0')
         systemtime_row.pack(fill=tk.X, pady=2)
@@ -483,7 +534,7 @@ class MF4ImporterGUI:
         self.systemtime_var = tk.StringVar()
         self.systemtime_entry = tk.Entry(systemtime_row, textvariable=self.systemtime_var)
         self.systemtime_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
-        
+
         # Sequence
         sequence_row = tk.Frame(paths_frame, bg='#f0f0f0')
         sequence_row.pack(fill=tk.X, pady=2)
@@ -491,7 +542,7 @@ class MF4ImporterGUI:
         self.sequence_var = tk.StringVar()
         self.sequence_entry = tk.Entry(sequence_row, textvariable=self.sequence_var)
         self.sequence_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
-        
+
         # Mempool
         mempool_row = tk.Frame(paths_frame, bg='#f0f0f0')
         mempool_row.pack(fill=tk.X, pady=2)
