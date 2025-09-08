@@ -199,7 +199,7 @@ class MF4ImporterGUI:
         source_row.pack(padx=2, pady=1, fill=tk.X)
         tk.Label(source_row, text="SOURCE:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.source_var = tk.StringVar(value="RadarFC")
-        self.source_options = ["RadarFC", "RadarFL", "RadarFR", "RadarRL", "RadarRR"]
+        self.source_options = ["RadarFC", "RadarFL", "RadarFR", "RadarRL", "RadarRR", "FVG3Evo"]
         self.source_menu = tk.OptionMenu(source_row, self.source_var, *self.source_options)
         self.source_menu.config(width=8)
         self.source_menu.pack(side=tk.LEFT, padx=(0, 5))
@@ -212,21 +212,23 @@ class MF4ImporterGUI:
         tk.Label(runtime_row, text="Runtime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
 
         # Runtime action buttons
-        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", width=6, font=("Arial", 8), command=self.run_gen_runtime, bg='#4CAF50', fg='white')
-        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 1))
+        self.gen_runtime_button = tk.Button(runtime_row, text="Generate", font=("Arial", 8, "bold"), command=self.run_gen_runtime, bg='#4CAF50', fg='white', height=1, width=8)
+        self.gen_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
 
-        self.old_import_button = tk.Button(runtime_row, text="Import", width=5, font=("Arial", 8), command=self.old_import_action)
-        self.old_import_button.pack(side=tk.LEFT, padx=(0, 1))
+        self.old_import_button = tk.Button(runtime_row, text="Old Import", width=7, font=("Arial", 8), command=self.old_import_action)
+        self.old_import_button.pack(side=tk.LEFT, padx=(0, 2))
 
-        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=5, font=("Arial", 8), command=self.choose_runtime_file)
-        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 1))
+        self.choose_runtime_button = tk.Button(runtime_row, text="Choose", width=7, font=("Arial", 8), command=self.choose_runtime_file)
+        self.choose_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
 
-        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=5, font=("Arial", 8), command=self.open_runtime_file)
+        self.open_runtime_button = tk.Button(runtime_row, text="Open", width=7, font=("Arial", 8), command=self.open_runtime_file)
         self.open_runtime_button.pack(side=tk.LEFT, padx=(0, 2))
 
         self.runtime_var = tk.StringVar()
-        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var, font=("Arial", 8), width=12)
+        self.runtime_entry = tk.Entry(runtime_row, textvariable=self.runtime_var, font=("Arial", 8))
         self.runtime_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    # (runtime_var and runtime_entry already created above)
         
         # ===== RIGHT PANEL - ACTIONS =====
         actions_section = tk.LabelFrame(right_frame, text="Actions & Controls", font=("Arial", 11, "bold"), padx=4, pady=3, bg='#f0f0f0')
@@ -245,8 +247,8 @@ class MF4ImporterGUI:
         # Run Simulation - Make it prominent
         simulation_frame = tk.Frame(actions_section, bg='#f0f0f0')
         simulation_frame.pack(fill=tk.X, pady=(0, 2))
-        self.run_simulation_button = tk.Button(simulation_frame, text=">> Run Simulation", command=self.run_simulation_action, font=("Arial", 8, "bold"), bg='#4CAF50', fg='white', height=1)
-        self.run_simulation_button.pack(fill=tk.X)
+        self.run_simulation_button = tk.Button(simulation_frame, text=">> Run Simulation", command=self.run_simulation_action, font=("Arial", 10, "bold"), bg='#4CAF50', fg='white', height=2)
+        self.run_simulation_button.pack(fill=tk.X, expand=True)
 
         # Runnable Level
         runnable_level_frame = tk.Frame(actions_section, bg='#f0f0f0')
@@ -274,12 +276,12 @@ class MF4ImporterGUI:
         
         # Split MF4
         self.split_mf4_button = tk.Button(utilities_section, text="Split MF4", command=self.open_split_mf4_dialog)
-        self.split_mf4_button.pack(fill=tk.X, pady=(0, 5))
+        self.split_mf4_button.pack(fill=tk.X, expand=True, pady=(0, 5))
         
         # GEN Missing Signals
         self.gen_missing_signals_button = tk.Button(utilities_section, text="GEN Missing Signals", 
-                                                  command=self.gen_missing_signals_action)
-        self.gen_missing_signals_button.pack(fill=tk.X, pady=(0, 5))
+                            command=self.gen_missing_signals_action)
+        self.gen_missing_signals_button.pack(fill=tk.X, expand=True, pady=(0, 5))
         
         # Buildtime XML
         buildtime_frame = tk.Frame(utilities_section, bg='#f0f0f0')
@@ -803,7 +805,6 @@ class MF4ImporterGUI:
             key = f"{project}|{variant}|{release}" if project and variant and release else None
             record_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "record")
             all_paths_file = os.path.join(record_dir, "all_paths.json")
-            # Nếu chưa có đủ, thực hiện gen ra output bằng subprocess
             toolbox_path = self.toolbox_var.get().strip()
             mf4_path = self.mf4_var.get().strip()
             if not toolbox_path or not os.path.isfile(toolbox_path):
@@ -819,9 +820,20 @@ class MF4ImporterGUI:
                 'sequence': os.path.join(base_folder, 'sequence', project, variant, release, 'sequence.csv'),
                 'mempool': os.path.join(base_folder, 'mempool', project, variant, release, 'mempool.csv'),
             }
-
+            # Lấy các loại cần gen từ checkboxes
+            selected_opts = []
+            if hasattr(self, 'ticket_vars'):
+                if self.ticket_vars.get('ALL', tk.BooleanVar()).get():
+                    selected_opts = ['systemtime', 'sequence', 'mempool']
+                else:
+                    for opt in ['systemtime', 'sequence', 'mempool']:
+                        if self.ticket_vars.get(opt, tk.BooleanVar()).get():
+                            selected_opts.append(opt)
+            else:
+                selected_opts = ['systemtime', 'sequence', 'mempool']
             # Đảm bảo các thư mục output tồn tại
-            for out_path in outputs.values():
+            for opt in selected_opts:
+                out_path = outputs[opt]
                 os.makedirs(os.path.dirname(out_path), exist_ok=True)
             # Mapping opt sang command đúng
             opt2cmd = {
@@ -830,7 +842,8 @@ class MF4ImporterGUI:
                 'mempool': 'mempools',
             }
             results = {}
-            for opt, out_path in outputs.items():
+            for opt in selected_opts:
+                out_path = outputs[opt]
                 cmd_name = opt2cmd.get(opt, opt)
                 cmd = [sys.executable, toolbox_path, 'mdf', cmd_name, mf4_path, '-o', out_path]
                 self.root.after(0, lambda c=cmd: self.append_info_text(f"[GEN] Đang chạy: {' '.join(c)}\n"))
@@ -849,12 +862,14 @@ class MF4ImporterGUI:
                 except Exception as e:
                     self.root.after(0, lambda opt=opt, e=e: self.append_info_text(f"[ERROR] Lỗi khi gen {opt}: {e}\n"))
                     results[opt] = ''
-            # Gán vào biến giao diện từ outputs
-            self.root.after(0, lambda v=outputs.get('systemtime', ''): self.systemtime_var.set(v))
-            self.root.after(0, lambda v=outputs.get('sequence', ''): self.sequence_var.set(v))
-            self.root.after(0, lambda v=outputs.get('mempool', ''): self.mempool_var.set(v))
-            self.root.after(0, lambda k=key: self.append_info_text(f"[INFO] Đã gen xong Systemtime, Sequence, Mempool cho {k}\n"))
-            # Có thể bổ sung logic lưu lại vào all_paths.json nếu muốn tự động cập nhật
+            # Gán vào biến giao diện từ outputs (chỉ update những gì đã gen)
+            if 'systemtime' in selected_opts:
+                self.root.after(0, lambda v=outputs.get('systemtime', ''): self.systemtime_var.set(v))
+            if 'sequence' in selected_opts:
+                self.root.after(0, lambda v=outputs.get('sequence', ''): self.sequence_var.set(v))
+            if 'mempool' in selected_opts:
+                self.root.after(0, lambda v=outputs.get('mempool', ''): self.mempool_var.set(v))
+            self.root.after(0, lambda k=key: self.append_info_text(f"[INFO] Đã gen xong: {', '.join(selected_opts)} cho {k}\n"))
         threading.Thread(target=worker, daemon=True).start()
 
     def set_toolbox(self):
@@ -1243,24 +1258,22 @@ class MF4ImporterGUI:
             if not os.path.isfile(python_path):
                 self.root.after(0, lambda: messagebox.showerror("Error", "Selected Conda environment is invalid or missing Python executable."))
                 return
-            
-            
 
-            # Construct the base command (add -u for unbuffered output)
+
+            # Build -dp mdf mdfplayer01 only for plugin registration, no MF4 file path
+            dp_args = "-dp mdf mdfplayer01 "
+            # If you need mdfplayer02 plugin registration, add similar line (without file path)
+            # Adapter file is not needed for runtime command
             command = (
                 f"{python_path} -u {toolbox_path} runtime create++ {scom_path} -c {json_path} "
                 f"--run {run_order_path} "
-                f"-s {source_var_path} "
                 f"-mb -mp {mempool_path} "
                 f"-sn {sequence_path} "
                 f"-st {systemtime_path} "
                 f"-o {runtime_output} "
-                f"-dk -dr mat "
-                f"-dr mdf -s mdf "
-                f"-dp mdf mdfplayer"
+                f"-dk -dr mat -dr mdf -s mdf "
+                f"{dp_args}"
             )
-            if adapter_path:
-                command += f" --a_mdfplayer01 {adapter_path}"
 
             self.root.after(0, lambda: self.append_info_text(f"[COMMAND] {command}\n"))
             self.root.after(0, lambda: self.append_info_text("[PROGRESS] Đang chạy Gen Runtime...\n"))
@@ -1285,7 +1298,7 @@ class MF4ImporterGUI:
                         plugins_new = '''<plugins>
     <recorder id="matrecorder" plugin="DataRecorderPluginMAT" />
     <plugin name="pl1r1v_player_module_mdf">
-      <player id="mdfplayer" plugin="PL1R1VDataPlayerPluginMDF" default="1" />
+      <player id="mdfplayer01" plugin="PL1R1VDataPlayerPluginMDF" default="1" />
     </plugin>
     <plugin name="pl1r1v_recorder_module_mdf">
       <recorder id="mdfrecorder" plugin="PL1R1VDataRecorderPluginMDF" />
@@ -1330,25 +1343,34 @@ class MF4ImporterGUI:
                 # BYD project: <repo>\apl\byd\selena\im_lazy.py
                 im_lazy_path = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "im_lazy.py"))
                 out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
+                run_im_lazy = True
+            elif project.upper() == "RN":
+                # RN project: không có im_lazy.py, chỉ chạy parser
+                out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
+                run_im_lazy = False
             else:
                 # Other projects: <repo>\{project}_apl\selena\im_lazy.py
                 im_lazy_path = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "im_lazy.py"))
                 out_dir = os.path.normpath(os.path.join(repo_path, f"{project}_apl", "selena", "config", "mapping"))
-            
-            cmd1 = [sys.executable, im_lazy_path]
+                run_im_lazy = True
             os.makedirs(out_dir, exist_ok=True)
             out_file = os.path.normpath(os.path.join(out_dir, f"a2lTable_{variant}_{release}.txt"))
-            parser_py = os.path.normpath(os.path.join(repo_path, "ip_dc", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
+            if project.upper() == "RN":
+                parser_py = os.path.normpath(os.path.join(repo_path, "ip_od", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
+            else:
+                parser_py = os.path.normpath(os.path.join(repo_path, "ip_dc", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
             cmd2 = [sys.executable, parser_py, "-i", a2l_path, "-o", out_file]
-            self.root.after(0, lambda: self.append_info_text(f"[GEN] Chạy: {' '.join(cmd1)}\n"))
-            try:
-                result1 = subprocess.run(cmd1, capture_output=True, text=True, check=True)
-                self.root.after(0, lambda: self.append_info_text(result1.stdout))
-                if result1.stderr:
-                    self.root.after(0, lambda: self.append_info_text(result1.stderr))
-            except Exception as e:
-                self.root.after(0, lambda e=e: self.append_info_text(f"[GEN] Lỗi chạy im_lazy.py: {e}\n"))
-                return
+            if run_im_lazy:
+                cmd1 = [sys.executable, im_lazy_path]
+                self.root.after(0, lambda: self.append_info_text(f"[GEN] Chạy: {' '.join(cmd1)}\n"))
+                try:
+                    result1 = subprocess.run(cmd1, capture_output=True, text=True, check=True)
+                    self.root.after(0, lambda: self.append_info_text(result1.stdout))
+                    if result1.stderr:
+                        self.root.after(0, lambda: self.append_info_text(result1.stderr))
+                except Exception as e:
+                    self.root.after(0, lambda e=e: self.append_info_text(f"[GEN] Lỗi chạy im_lazy.py: {e}\n"))
+                    return
             self.root.after(0, lambda: self.append_info_text(f"[GEN] Chạy: {' '.join(cmd2)}\n"))
             try:
                 result2 = subprocess.run(cmd2, capture_output=True, text=True)
@@ -2026,24 +2048,24 @@ class MF4ImporterGUI:
         env_path = os.path.normpath(os.path.join(conda_envs_dir, env_name))
         python_path = os.path.normpath(os.path.join(env_path, "python.exe"))
         
-        # Build command
+        # Build command with correct MF4/adapter arguments
         cmd = (
-            f'"{exe_path}" -c "{runtime_xml}" --i_mdfplayer "{mf4_path}" -o "{output_mf4}" '
+            f'"{exe_path}" -c "{runtime_xml}" '
             f'--enable-doorkeeper --enable-multibuffer-border --nogui -l "{output_log}" -s {source} '
             f'--userparam {userparam} --plugins_directory "{plugins_dir}"'
         )
-        
-        # Thêm adapter cho MF4 Player 1
-        if adapter_path and os.path.isfile(adapter_path):
-            cmd += f' -a "{adapter_path}"'
-        
-        # Thêm --i_mdfplayer02 nếu có MF4 thứ 2
+
+        # MF4 Player 1
+        if mf4_path and os.path.isfile(mf4_path):
+            cmd += f' --i_mdfplayer01 "{mf4_path}" -o "{output_mf4}"'
+            if adapter_path and os.path.isfile(adapter_path):
+                cmd += f' --a_mdfplayer01 "{adapter_path}"'
+
+        # MF4 Player 2
         if mf4_02_path and os.path.isfile(mf4_02_path):
             cmd += f' --i_mdfplayer02 "{mf4_02_path}"'
-            
-        # Thêm --a_mdfplayer02 nếu có adapter cho MF4 thứ 2
-        if adapter_02_path and os.path.isfile(adapter_02_path):
-            cmd += f' --a_mdfplayer02 "{adapter_02_path}"'
+            if adapter_02_path and os.path.isfile(adapter_02_path):
+                cmd += f' --a_mdfplayer02 "{adapter_02_path}"'
         def run():
             # Lưu command và configuration info
             if output_folder:
@@ -2165,8 +2187,11 @@ class MF4ImporterGUI:
             # Đường dẫn report và Justin đồng bộ theo yêu cầu, theo project/variant/release
             Justin_path = os.path.join(base_folder, "Justin", project, variant, release).replace("\\", "/")
 
+            #path to mf4 file
+            mf4_path = self.mf4_var.get().strip().replace("\\", "/") if self.mf4_var.get().strip() else ""
+            mf4_name = os.path.splitext(os.path.basename(mf4_path))[0] if mf4_path else "AEB"
             # Lấy các giá trị động từ GUI hoặc build từ project/variant/release
-            runtime_path = os.path.join(Justin_path, "runtimes").replace("\\", "/")
+            runtime_path = os.path.join(Justin_path, mf4_name, "runtimes").replace("\\", "/")
             #path to json 
             json_path = os.path.join(self.json_var.get().strip()).replace("\\", "/")
             #path to selena.exe
@@ -2175,9 +2200,7 @@ class MF4ImporterGUI:
             source_var_path = os.path.normpath(self.source_var.get().strip()).replace("\\", "/")
             #path to repo 
             repo_path = self.repo_path_var.get().strip()
-            #path to mf4 file
-            mf4_path = self.mf4_var.get().strip().replace("\\", "/") if self.mf4_var.get().strip() else ""
-            mf4_name = os.path.splitext(os.path.basename(mf4_path))[0] if mf4_path else "AEB"
+            
             #path to data
             data_path = os.path.normpath(os.path.dirname(mf4_path)).replace("\\", "/")
             data_path = data_path + "/"
@@ -2189,12 +2212,12 @@ class MF4ImporterGUI:
                     ".*m_systemTime.*",
                     ".*freeHeadOffset.*"
                 ],
-                "justin_config_path": os.path.join(Justin_path, "justin_configs").replace("\\", "/"),
+                "justin_config_path": os.path.join(Justin_path, mf4_name, "justin_configs").replace("\\", "/"),
                 "justin_path": os.path.join(repo_path, "ip_dc/dc_tools/justin").replace("\\", "/"),
-                "report_path": os.path.join(Justin_path, "reports").replace("\\", "/"),
+                "report_path": os.path.join(Justin_path, mf4_name, "reports").replace("\\", "/"),
                 "selena_args": "--enable-multibuffer-border --enable-doorkeeper",
                 "selena_path": os.path.normpath(os.path.dirname(exe_path)).replace("\\", "/") if exe_path else "",
-                "testplan_path": os.path.join(Justin_path, "testplan_path").replace("\\", "/"),
+                "testplan_path": os.path.join(Justin_path, mf4_name,"testplan_path").replace("\\", "/"),
                 "tolerance": 1e-5,
                 "source" : source_var_path                 
             }
@@ -2280,14 +2303,14 @@ class MF4ImporterGUI:
                 release = self.release_var.get().strip()
                 base_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                 
-                # Tạo folder output với tên MF4
-                output_folder = os.path.join(base_folder, "Justin", project, variant, release, f"output_{mf4_name}")
-                os.makedirs(output_folder, exist_ok=True)
+                # # Tạo folder output với tên MF4
+                # output_folder = os.path.join(base_folder, "Justin", project, variant, release, f"output_{mf4_name}")
+                # os.makedirs(output_folder, exist_ok=True)
                 
                 # Tạo Justin_path để chứa scripts
-                Justin_path = os.path.join(base_folder, "Justin", project, variant, release).replace("\\", "/")
+                Justin_path = os.path.join(base_folder, "Justin", project, variant, release, mf4_name, f"scripts_path").replace("\\", "/")
                 
-                self.append_info_text(f"[Gen testplan] Tạo folder output: {output_folder}\n")
+                # self.append_info_text(f"[Gen testplan] Tạo folder output: {output_folder}\n")
                 
                 cmd = [
                     python_path,
@@ -2316,13 +2339,22 @@ class MF4ImporterGUI:
             project = self.project_var.get().strip()
             variant = self.variant_var.get().strip()
             release = self.release_var.get().strip()
+
+            # Lấy tên file MF4 để tạo folder output
+            mf4_path = self.mf4_var.get().strip()
+            if not mf4_path or not os.path.isfile(mf4_path):
+                self.append_info_text("[Gen testplan] Vui lòng chọn đúng file MF4!\n")
+                return
+            
+            mf4_name = os.path.splitext(os.path.basename(mf4_path))[0]  # Lấy tên file không có extension
+                
             
             if not all([project, variant, release]):
                 self.append_info_text("[OPEN Gen testplan] Vui lòng chọn đầy đủ Project, Variant, Release!\n")
                 return
             
             base_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            justin_folder = os.path.join(base_folder, "Justin", project, variant, release)
+            justin_folder = os.path.join(base_folder, "Justin", project, variant, release, mf4_name)
             
             if not os.path.exists(justin_folder):
                 self.append_info_text(f"[OPEN Gen testplan] Không tìm thấy thư mục Justin: {justin_folder}\n")
@@ -2510,7 +2542,7 @@ class MF4ImporterGUI:
                 mf4_name = os.path.splitext(os.path.basename(mf4_path))[0]
                 
                 # Input file (MissingSignals.txt)
-                missing_signals_input = os.path.join(mf4_dir, f"{mf4_name}_log.txt_MissingSignals.txt")
+                missing_signals_input = os.path.join(mf4_dir,f"output_{mf4_name}",f"{mf4_name}_simulation.log_MissingSignals.txt")
                 
                 # Output directory - tạo nếu chưa có
                 output_dir = os.path.join(mf4_dir, "MissingSignal_Report")
