@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import re
 import zipfile
+import time
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -204,7 +205,7 @@ class MF4ImporterGUI:
         self.source_menu.config(width=8)
         self.source_menu.pack(side=tk.LEFT, padx=(0, 5))
         # Khi đổi SOURCE thì tự động lấy delivery folder nếu có
-        self.source_var.trace_add("write", lambda *args: self.root.after_idle(self.update_a2l_config_by_project()))
+        self.source_var.trace_add("write", lambda *args: self.root.after_idle(self.update_a2l_config_by_project))
 
         # Runtime generation and selection
         runtime_row = tk.Frame(runtime_frame, bg='#f0f0f0')
@@ -241,6 +242,8 @@ class MF4ImporterGUI:
         self.run_order_var = tk.StringVar()
         self.run_order_button = tk.Button(run_order_frame, text="Select", command=self.run_order_action, width=6, font=("Arial", 8))
         self.run_order_button.pack(side=tk.LEFT, padx=(2, 2))
+        self.gen_run_order_button = tk.Button(run_order_frame, text="Gen", command=self.gen_run_order, width=6, font=("Arial", 8))
+        self.gen_run_order_button.pack(side=tk.LEFT, padx=(2, 2))
         self.run_order_entry = tk.Entry(run_order_frame, textvariable=self.run_order_var, font=("Arial", 8), width=12)
         self.run_order_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -273,10 +276,6 @@ class MF4ImporterGUI:
         utilities_section = tk.LabelFrame(right_frame, text="Utilities", font=("Arial", 11, "bold"), 
                         padx=4, pady=3, bg='#f0f0f0')
         utilities_section.pack(fill=tk.X, pady=(0, 4))
-        
-        # Split MF4
-        self.split_mf4_button = tk.Button(utilities_section, text="Split MF4", command=self.open_split_mf4_dialog)
-        self.split_mf4_button.pack(fill=tk.X, expand=True, pady=(0, 5))
         
         # GEN Missing Signals
         self.gen_missing_signals_button = tk.Button(utilities_section, text="GEN Missing Signals", 
@@ -419,14 +418,16 @@ class MF4ImporterGUI:
         self.find_a2l_button = tk.Button(delivery_frame, text="Find A2L", command=self.find_a2l_in_zip, width=8)
         self.find_a2l_button.pack(side=tk.LEFT)
         
-        # A2L Path (readonly)
+        # A2L Path (editable)
         self.a2l_actual_var = tk.StringVar()
         a2l_path_frame = tk.Frame(a2l_section, bg='#f0f0f0')
         a2l_path_frame.pack(fill=tk.X, pady=(0, 2))
         tk.Label(a2l_path_frame, text="A2L Path:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
-        self.a2l_path_entry = tk.Entry(a2l_path_frame, textvariable=self.a2l_actual_var, state="readonly", 
-                                      bg='#e8e8e8')
-        self.a2l_path_entry.pack(side=tk.LEFT, padx=(5, 0), fill=tk.X, expand=True)
+        self.a2l_path_entry = tk.Entry(a2l_path_frame, textvariable=self.a2l_actual_var, 
+                                      bg='white')
+        self.a2l_path_entry.pack(side=tk.LEFT, padx=(5, 5), fill=tk.X, expand=True)
+        self.browse_a2l_button = tk.Button(a2l_path_frame, text="Browse", command=self.browse_a2l_file, width=8)
+        self.browse_a2l_button.pack(side=tk.LEFT)
         
         # A2L Table
         self.a2l_table_var = tk.StringVar()
@@ -500,10 +501,12 @@ class MF4ImporterGUI:
         self.open_scom_button = tk.Button(scom_frame, text="Browse", command=self.open_scom_file, width=8)
         self.open_scom_button.pack(side=tk.LEFT, padx=(5, 2))
         self.find_scom_button = tk.Button(scom_frame, text="Find", command=self.find_scom_in_zip, width=6)
-        self.find_scom_button.pack(side=tk.LEFT, padx=(0, 5))
+        self.find_scom_button.pack(side=tk.LEFT, padx=(0, 2))
         self.scom_actual_var = tk.StringVar()
-        self.scom_path_entry = tk.Entry(scom_frame, textvariable=self.scom_actual_var, state="readonly", bg='#e8e8e8')
-        self.scom_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.scom_path_entry = tk.Entry(scom_frame, textvariable=self.scom_actual_var, bg='white')
+        self.scom_path_entry.pack(side=tk.LEFT, padx=(5, 5), fill=tk.X, expand=True)
+        self.browse_scom_button = tk.Button(scom_frame, text="Browse", command=self.browse_scom_file, width=8)
+        self.browse_scom_button.pack(side=tk.LEFT)
         
         # MF4 & Adapter Files Section
         mf4_section = tk.LabelFrame(left_frame, text="MF4 & Adapter Files", font=("Arial", 11, "bold"), 
@@ -513,7 +516,7 @@ class MF4ImporterGUI:
         # MF4 Player 1
         mf4_frame = tk.Frame(mf4_section, bg='#f0f0f0')
         mf4_frame.pack(fill=tk.X, pady=(0, 1))
-        tk.Label(mf4_frame, text="MF4 Player 1:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        tk.Label(mf4_frame, text="MF4 Player:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.choose_mf4_button = tk.Button(mf4_frame, text="Choose", command=self.choose_mf4_file, width=8)
         self.choose_mf4_button.pack(side=tk.LEFT, padx=(5, 5))
         self.mf4_var = tk.StringVar()
@@ -525,7 +528,7 @@ class MF4ImporterGUI:
         # Adapter Player 1
         adapter_frame = tk.Frame(mf4_section, bg='#f0f0f0')
         adapter_frame.pack(fill=tk.X, pady=(0, 1))
-        tk.Label(adapter_frame, text="Adapter 1:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        tk.Label(adapter_frame, text="Adapter 01:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
         self.choose_adapter_button = tk.Button(adapter_frame, text="Choose", command=self.choose_adapter_file, width=8)
         self.choose_adapter_button.pack(side=tk.LEFT, padx=(5, 5))
         self.adapter_file_var = getattr(self, 'adapter_file_var', tk.StringVar())
@@ -533,6 +536,18 @@ class MF4ImporterGUI:
         self.adapter_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
         self.open_adapter_button = tk.Button(adapter_frame, text="Open", command=self.open_adapter_folder, width=6)
         self.open_adapter_button.pack(side=tk.LEFT)
+        
+        # Adapter Player 2
+        adapter2_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        adapter2_frame.pack(fill=tk.X, pady=(0, 1))
+        tk.Label(adapter2_frame, text="Adapter 02:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_adapter2_button = tk.Button(adapter2_frame, text="Choose", command=self.choose_adapter2_file, width=8)
+        self.choose_adapter2_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.adapter2_file_var = tk.StringVar()
+        self.adapter2_entry = tk.Entry(adapter2_frame, textvariable=self.adapter2_file_var)
+        self.adapter2_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_adapter2_button = tk.Button(adapter2_frame, text="Open", command=self.open_adapter2_folder, width=6)
+        self.open_adapter2_button.pack(side=tk.LEFT)
         
         # MF4 Player 2
         mf4_02_frame = tk.Frame(mf4_section, bg='#f0f0f0')
@@ -546,19 +561,38 @@ class MF4ImporterGUI:
         self.open_mf4_02_button = tk.Button(mf4_02_frame, text="Open", command=self.open_mf4_02_file, width=6)
         self.open_mf4_02_button.pack(side=tk.LEFT)
         
-        # Adapter Player 2
-        adapter_02_frame = tk.Frame(mf4_section, bg='#f0f0f0')
-        adapter_02_frame.pack(fill=tk.X)
-        tk.Label(adapter_02_frame, text="Adapter 2:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
-        self.choose_adapter_02_button = tk.Button(adapter_02_frame, text="Choose", command=self.choose_adapter_02_file, width=8)
-        self.choose_adapter_02_button.pack(side=tk.LEFT, padx=(5, 5))
-        self.adapter_02_var = tk.StringVar()
-        self.adapter_02_entry = tk.Entry(adapter_02_frame, textvariable=self.adapter_02_var)
-        self.adapter_02_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
-        self.open_adapter_02_button = tk.Button(adapter_02_frame, text="Open", command=self.open_adapter_02_folder, width=6)
-        self.open_adapter_02_button.pack(side=tk.LEFT)
+        # TaskTime
+        tasktime_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        tasktime_frame.pack(fill=tk.X, pady=(0, 1))
+        tk.Label(tasktime_frame, text="TaskTime:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.choose_tasktime_button = tk.Button(tasktime_frame, text="Choose", command=self.choose_tasktime_file, width=8)
+        self.choose_tasktime_button.pack(side=tk.LEFT, padx=(5, 5))
+        self.tasktime_var = tk.StringVar()
+        self.tasktime_entry = tk.Entry(tasktime_frame, textvariable=self.tasktime_var)
+        self.tasktime_entry.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
+        self.open_tasktime_button = tk.Button(tasktime_frame, text="Open", command=self.open_tasktime_folder, width=6)
+        self.open_tasktime_button.pack(side=tk.LEFT)
 
-        # Initialize placeholder for BCT output entry
+        # Compare Mapping Tables Section
+        compare_frame = tk.Frame(mf4_section, bg='#f0f0f0')
+        compare_frame.pack(fill=tk.X, pady=(0, 1))
+        
+        # Compare Mapping Tables button
+        compare_mapping_row = tk.Frame(compare_frame, bg='#f0f0f0')
+        compare_mapping_row.pack(fill=tk.X, pady=(0, 2))
+        tk.Label(compare_mapping_row, text="Compare:", width=12, anchor='w', bg='#f0f0f0').pack(side=tk.LEFT)
+        self.compare_mapping_button = tk.Button(
+            compare_mapping_row, 
+            text="Compare Mapping Tables", 
+            command=self.compare_mapping_tables,
+            width=22,
+            bg='#2196F3',
+            fg='white',
+            font=('Arial', 9, 'bold')
+        )
+        self.compare_mapping_button.pack(side=tk.LEFT, padx=(5, 5))
+
+        # Initialize placeholder for BCT output entryb
         self.bct_out_placeholder = "path to bct.bat file"
         self.bct_out_entry.insert(0, self.bct_out_placeholder)
         self.bct_out_entry.config(fg="grey")
@@ -589,13 +623,14 @@ class MF4ImporterGUI:
             "json": self.json_var,
             "mf4": self.mf4_var,
             "mf4_02": self.mf4_02_var,
+            "tasktime": self.tasktime_var,
             "exe": self.selena_exe_var,
             "build_selena": self.build_selena_path_var,
             "bct_out": self.bct_out_path_var,
             "runtime": self.runtime_var,
             "a2l_config": self.delivery_var,
             "adapter": self.adapter_file_var,
-            "adapter_02": self.adapter_02_var,
+            "adapter2": self.adapter2_file_var,
             "run_order": self.run_order_var,
             "a2l_actual": self.a2l_actual_var,
             "a2l_table": self.a2l_table_var,
@@ -727,22 +762,24 @@ class MF4ImporterGUI:
                 folder_path = os.path.dirname(file_path)
                 os.startfile(folder_path)
 
-    def choose_adapter_02_file(self):
+    def choose_adapter2_file(self):
         # Mở File Explorer để chọn file Adapter 2
-        file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 02 File")
+        file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 2 File")
         
         if file_path:
-            self.adapter_02_var.set(file_path)
+            self.adapter2_file_var.set(file_path)
+            self.adapter2_entry.config(fg="black")
 
-    def open_adapter_02_folder(self):
-        current_file_path = self.adapter_02_var.get().strip()
+    def open_adapter2_folder(self):
+        current_file_path = self.adapter2_file_var.get().strip()
         if current_file_path and os.path.isfile(current_file_path):
             folder_path = os.path.dirname(current_file_path)
             os.startfile(folder_path)
         else:
-            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 02 File")
+            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select Adapter 2 File")
             if file_path:
-                self.adapter_02_var.set(file_path)
+                self.adapter2_file_var.set(file_path)
+                self.adapter2_entry.config(fg="black")
                 folder_path = os.path.dirname(file_path)
                 os.startfile(folder_path)
 
@@ -1208,6 +1245,7 @@ class MF4ImporterGUI:
             json_path = self.json_var.get().strip()
             mf4_path = self.mf4_var.get().strip()
             adapter_path = self.adapter_file_var.get().strip()
+            tasktime_path = self.tasktime_var.get().strip()
             env_name = self.selected_env_var.get().strip()
             # Resolve Conda environment Python path using gen_mem_sequence logic
             user_home = os.path.expanduser('~')
@@ -1260,9 +1298,15 @@ class MF4ImporterGUI:
                 return
 
 
-            # Build -dp mdf mdfplayer01 only for plugin registration, no MF4 file path
-            dp_args = "-dp mdf mdfplayer01 "
-            # If you need mdfplayer02 plugin registration, add similar line (without file path)
+            # Build -dp mdf for both mdfplayer01 and mdfplayer02 plugin registration, no MF4 file paths
+            dp_args = "-dp mdf mdfplayer "
+            
+            # Add tasktime parameter if provided
+            tt_args = ""
+            if tasktime_path and os.path.isfile(tasktime_path):
+                tt_args = f"-tt {tasktime_path} "
+            
+            # Register both mdfplayer plugins for runtime flexibility
             # Adapter file is not needed for runtime command
             command = (
                 f"{python_path} -u {toolbox_path} runtime create++ {scom_path} -c {json_path} "
@@ -1270,6 +1314,7 @@ class MF4ImporterGUI:
                 f"-mb -mp {mempool_path} "
                 f"-sn {sequence_path} "
                 f"-st {systemtime_path} "
+                f"{tt_args}"
                 f"-o {runtime_output} "
                 f"-dk -dr mat -dr mdf -s mdf "
                 f"{dp_args}"
@@ -1344,7 +1389,15 @@ class MF4ImporterGUI:
                 im_lazy_path = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "im_lazy.py"))
                 out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
                 run_im_lazy = True
+            if project.upper() == "CNMS":
+                # cnms project: không có im_lazy.py, chỉ chạy parser
+                out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
+                run_im_lazy = False
             elif project.upper() == "RN":
+                # RN project: không có im_lazy.py, chỉ chạy parser
+                out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
+                run_im_lazy = False
+            elif project.upper() == "RNSUV":
                 # RN project: không có im_lazy.py, chỉ chạy parser
                 out_dir = os.path.normpath(os.path.join(repo_path, "apl", "byd", "selena", "config", "mapping"))
                 run_im_lazy = False
@@ -1355,8 +1408,10 @@ class MF4ImporterGUI:
                 run_im_lazy = True
             os.makedirs(out_dir, exist_ok=True)
             out_file = os.path.normpath(os.path.join(out_dir, f"a2lTable_{variant}_{release}.txt"))
-            if project.upper() == "RN":
+            if project.upper() == "RN" :
                 parser_py = os.path.normpath(os.path.join(repo_path, "ip_od", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
+            elif  project.upper() == "CNMS":
+                parser_py = os.path.normpath(os.path.join(repo_path, "ip_dc", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
             else:
                 parser_py = os.path.normpath(os.path.join(repo_path, "ip_dc", "dc_tools", "utils", "a2l_processing", "ASAPParser.py"))
             cmd2 = [sys.executable, parser_py, "-i", a2l_path, "-o", out_file]
@@ -1899,6 +1954,32 @@ class MF4ImporterGUI:
                 folder_path = os.path.dirname(file_path)
                 os.startfile(folder_path)
 
+    def choose_tasktime_file(self):
+        # Mở File Explorer để chọn file TaskTime
+        file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select TaskTime File")
+        
+        if file_path:
+            # Cập nhật đường dẫn file vào tasktime_var và hiển thị trong tasktime_entry
+            self.tasktime_var.set(file_path)
+            self.tasktime_entry.config(fg="black")
+
+    def open_tasktime_folder(self):
+        current_file_path = self.tasktime_var.get().strip()
+        if current_file_path and os.path.isfile(current_file_path):
+            folder_path = os.path.dirname(current_file_path)
+            os.startfile(folder_path)
+        else:
+            file_path = filedialog.askopenfilename(filetypes=[("All files", "*.*")], title="Select TaskTime File")
+            if file_path:
+                self.tasktime_var.set(file_path)
+                self.tasktime_entry.config(fg="black")
+                folder_path = os.path.dirname(file_path)
+                os.startfile(folder_path)
+
+    # Removed old SCOM-based auto fix methods - keeping only MF4-based approach
+
+    # Method removed - replaced with run_auto_fix_from_mf4_clean
+
     def save_all_paths(self, *args):
         # Lưu tất cả các biến path_vars vào all_paths.json, bao gồm run_order và selena_env
        
@@ -2000,9 +2081,128 @@ class MF4ImporterGUI:
         self.root.wait_window(top)
 
     def run_order_action(self):
-        # TODO: Thực hiện logic run_order tại đây
-        value = self.run_order_var.get().strip()
-        messagebox.showinfo("Run Order", f"Đã thực thi Run Order với: {value}")
+        """Select run_order.json file"""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select Run Order JSON File",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.run_order_var.set(file_path)
+            self.append_info_text(f"[Run Order] Selected: {file_path}\n")
+
+    def gen_run_order(self):
+        """Generate run_order.json from Runtime XML"""
+        def worker():
+            try:
+                from tkinter import messagebox
+                
+                # Get runtime XML path
+                runtime_xml = self.runtime_var.get().strip()
+                if not runtime_xml:
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Runtime XML path is empty!\nPlease select or generate a runtime.xml file first."))
+                    return
+                
+                if not os.path.isfile(runtime_xml):
+                    self.root.after(0, lambda path=runtime_xml: messagebox.showerror("Error", f"Runtime XML file not found!\n\nPath: {path}\n\nPlease check if the file exists."))
+                    return
+                
+                self.root.after(0, lambda path=runtime_xml: self.append_info_text(f"[Gen Run Order] Reading: {path}\n"))
+                
+                # Get project info
+                project = self.project_var.get().strip()
+                variant = self.variant_var.get().strip()
+                release = self.release_var.get().strip()
+                
+                if not project or not variant or not release:
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Please fill in Project, Variant, and Release!"))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text("[Gen Run Order] 🔄 Parsing Runtime XML...\n"))
+                
+                # Parse Runtime XML to extract runnables
+                tree = ET.parse(runtime_xml)
+                root = tree.getroot()
+                
+                # Debug: Print root tag and namespaces
+                self.root.after(0, lambda: self.append_info_text(f"[Gen Run Order] Root tag: {root.tag}\n"))
+                
+                runnables = []
+                # Try different patterns to find runnables
+                # Pattern 1: .//runnable with 'id' attribute
+                for runnable in root.findall('.//runnable'):
+                    runnable_id = runnable.get('id')
+                    if runnable_id:
+                        runnables.append(runnable_id)
+                
+                # Pattern 2: .//Runnable with 'id' attribute (capital R)
+                if not runnables:
+                    for runnable in root.findall('.//Runnable'):
+                        runnable_id = runnable.get('id')
+                        if runnable_id:
+                            runnables.append(runnable_id)
+                
+                # Pattern 3: Try 'name' attribute instead of 'id'
+                if not runnables:
+                    for runnable in root.findall('.//runnable'):
+                        runnable_id = runnable.get('name')
+                        if runnable_id:
+                            runnables.append(runnable_id)
+                
+                # Pattern 4: Try 'name' attribute with capital R
+                if not runnables:
+                    for runnable in root.findall('.//Runnable'):
+                        runnable_id = runnable.get('name')
+                        if runnable_id:
+                            runnables.append(runnable_id)
+                
+                # Debug: Show what was found
+                if not runnables:
+                    # Try to find any elements and print them for debugging
+                    all_tags = set()
+                    for elem in root.iter():
+                        all_tags.add(elem.tag)
+                    
+                    tags_str = ", ".join(sorted(list(all_tags)[:20]))
+                    self.root.after(0, lambda: self.append_info_text(f"[Gen Run Order] Available tags: {tags_str}\n"))
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"No runnables found in Runtime XML!\n\nAvailable tags: {tags_str}\n\nPlease check the XML structure."))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text(f"[Gen Run Order] Found {len(runnables)} runnables\n"))
+                
+                # Get MF4 name for output folder
+                mf4_path = self.mf4_var.get().strip()
+                if mf4_path and os.path.isfile(mf4_path):
+                    mf4_name = os.path.splitext(os.path.basename(mf4_path))[0]
+                else:
+                    mf4_name = "default"
+                
+                # Create output directory
+                base_folder = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                output_folder = os.path.join(base_folder, "Justin", project, variant, release, mf4_name)
+                os.makedirs(output_folder, exist_ok=True)
+                
+                # Create run_order.json
+                run_order_file = os.path.join(output_folder, "run_order.json")
+                run_order_data = {
+                    "run_order": runnables
+                }
+                
+                with open(run_order_file, 'w', encoding='utf-8') as f:
+                    json.dump(run_order_data, f, ensure_ascii=False, indent=2)
+                
+                # Update GUI variable
+                self.run_order_var.set(run_order_file)
+                
+                self.root.after(0, lambda: self.append_info_text(f"[Gen Run Order] ✅ Created: {run_order_file}\n"))
+                self.root.after(0, lambda: self.append_info_text(f"[Gen Run Order] Total runnables: {len(runnables)}\n"))
+                self.root.after(0, lambda: messagebox.showinfo("Success", f"Generated run_order.json with {len(runnables)} runnables!\n\n{run_order_file}"))
+                
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.append_info_text(f"[Gen Run Order] ❌ Error: {err}\n"))
+                self.root.after(0, lambda err=str(e): messagebox.showerror("Error", f"Failed to generate run_order.json: {err}"))
+        
+        threading.Thread(target=worker, daemon=True).start()
 
     def run_simulation_action(self):
         from tkinter import messagebox
@@ -2010,9 +2210,9 @@ class MF4ImporterGUI:
         exe_path = os.path.normpath(self.selena_exe_var.get().strip())
         runtime_xml = os.path.normpath(self.runtime_var.get().strip())
         mf4_path = os.path.normpath(self.mf4_var.get().strip())
-        mf4_02_path = os.path.normpath(self.mf4_02_var.get().strip())  # Thêm MF4 thứ 2
-        adapter_path = os.path.normpath(self.adapter_file_var.get().strip())  # Adapter 1
-        adapter_02_path = os.path.normpath(self.adapter_02_var.get().strip())  # Adapter 2
+        mf4_02_path = os.path.normpath(self.mf4_02_var.get().strip())
+        adapter_path = os.path.normpath(self.adapter_file_var.get().strip())
+        adapter2_path = os.path.normpath(self.adapter2_file_var.get().strip())
         
         # Tạo output directory dựa trên tên MF4
         if mf4_path:
@@ -2048,24 +2248,24 @@ class MF4ImporterGUI:
         env_path = os.path.normpath(os.path.join(conda_envs_dir, env_name))
         python_path = os.path.normpath(os.path.join(env_path, "python.exe"))
         
-        # Build command with correct MF4/adapter arguments
+        # Build command with single adapter
         cmd = (
             f'"{exe_path}" -c "{runtime_xml}" '
             f'--enable-doorkeeper --enable-multibuffer-border --nogui -l "{output_log}" -s {source} '
             f'--userparam {userparam} --plugins_directory "{plugins_dir}"'
         )
 
-        # MF4 Player 1
+        # Add MF4 Player 1 input and output files with adapter
         if mf4_path and os.path.isfile(mf4_path):
             cmd += f' --i_mdfplayer01 "{mf4_path}" -o "{output_mf4}"'
             if adapter_path and os.path.isfile(adapter_path):
                 cmd += f' --a_mdfplayer01 "{adapter_path}"'
-
-        # MF4 Player 2
+            
+        # Add MF4 Player 2 input file with adapter
         if mf4_02_path and os.path.isfile(mf4_02_path):
             cmd += f' --i_mdfplayer02 "{mf4_02_path}"'
-            if adapter_02_path and os.path.isfile(adapter_02_path):
-                cmd += f' --a_mdfplayer02 "{adapter_02_path}"'
+            if adapter2_path and os.path.isfile(adapter2_path):
+                cmd += f' --a_mdfplayer02 "{adapter2_path}"'
         def run():
             # Lưu command và configuration info
             if output_folder:
@@ -2078,13 +2278,13 @@ class MF4ImporterGUI:
                         f.write(f"[CONFIGURATION]\n")
                         f.write(f"Selena EXE: {exe_path}\n")
                         f.write(f"Runtime XML: {runtime_xml}\n")
-                        f.write(f"Input MF4: {mf4_path}\n")
-                        if adapter_path and os.path.isfile(adapter_path):
-                            f.write(f"Adapter 1: {adapter_path}\n")
+                        f.write(f"Input MF4 01: {mf4_path}\n")
                         if mf4_02_path and os.path.isfile(mf4_02_path):
                             f.write(f"Input MF4 02: {mf4_02_path}\n")
-                        if adapter_02_path and os.path.isfile(adapter_02_path):
-                            f.write(f"Adapter 2: {adapter_02_path}\n")
+                        if adapter_path and os.path.isfile(adapter_path):
+                            f.write(f"Adapter 01: {adapter_path}\n")
+                        if adapter2_path and os.path.isfile(adapter2_path):
+                            f.write(f"Adapter 02: {adapter2_path}\n")
                         f.write(f"Output MF4: {output_mf4}\n")
                         f.write(f"Log File: {output_log}\n")
                         f.write(f"Source: {source}\n")
@@ -2156,6 +2356,16 @@ class MF4ImporterGUI:
                         self.root.after(0, lambda: self.append_info_text(f"[SIM] All outputs saved in: {output_folder}\n"))
                 else:
                     self.root.after(0, lambda: self.append_info_text(f"[SIM] Simulation failed with code {proc.returncode}.\n"))
+                    
+                    # Check for common errors and provide suggestions
+                    output_text = '\n'.join(output_lines) if output_lines else ""
+                    if "ASSERTION" in output_text and "Mandatory receiver port is not connected" in output_text:
+                        self.root.after(0, lambda: self.append_info_text("[SIM] SUGGESTION: This error is often caused by runnable task mapping issues.\n"))
+                        self.root.after(0, lambda: self.append_info_text("[SIM] SUGGESTION: Try running 'Auto Fix Tasks' to update runnable-to-task mappings.\n"))
+                        self.root.after(0, lambda: self.append_info_text("[SIM] SUGGESTION: Make sure SCOM file and JSON config paths are correctly set in GUI.\n"))
+                    elif proc.returncode == 3221226505:  # Common Windows error code for assertion failure
+                        self.root.after(0, lambda: self.append_info_text("[SIM] SUGGESTION: Assertion failure detected. Check for port connection issues.\n"))
+                        self.root.after(0, lambda: self.append_info_text("[SIM] SUGGESTION: Consider running 'Auto Fix Tasks' to resolve runnable mappings.\n"))
             except Exception as e:
                 self.root.after(0, lambda: self.append_info_text(f"[SIM][ERROR] {e}\n"))
         threading.Thread(target=run, daemon=True).start()
@@ -2416,57 +2626,6 @@ class MF4ImporterGUI:
         except Exception as e:
             self.append_info_text(f"[OPEN Gen testplan] Lỗi khi mở thư mục: {e}\n")
 
-    def split_mf4_file(self):
-        from tkinter import messagebox
-        import datetime
-        import os
-        def worker():
-            try:
-                import asammdf
-            except ImportError:
-                self.root.after(0, lambda: self.append_info_text("[Split MF4] Chưa cài đặt asammdf. Vui lòng chạy: pip install asammdf\n"))
-                messagebox.showerror("Split MF4", "Chưa cài đặt asammdf. Vui lòng chạy: pip install asammdf")
-                return
-            file_path = self.mf4_var.get().strip()
-            if not file_path or not os.path.isfile(file_path):
-                self.root.after(0, lambda: self.append_info_text("[Split MF4] Vui lòng chọn đúng file MF4!\n"))
-                messagebox.showerror("Split MF4", "Vui lòng chọn đúng file MF4!")
-                return
-            try:
-                self.root.after(0, lambda: self.append_info_text(f"[Split MF4] Đang tách file: {file_path}\n"))
-                mdf = asammdf.MDF(file_path)
-                # --- Tách MF4 theo dung lượng file (100-300MB mỗi file) ---
-                target_mb = 200  # Đổi giá trị này nếu muốn 100-300MB
-                file_size = os.path.getsize(file_path)
-                n_parts = max(1, int(file_size // (target_mb * 1024 * 1024)) + (1 if file_size % (target_mb * 1024 * 1024) else 0))
-                out_dir = os.path.dirname(file_path)
-                base_name = os.path.splitext(os.path.basename(file_path))[0]
-                # Chia theo tỉ lệ phần trăm dữ liệu
-                for i in range(n_parts):
-                    start_frac = i / n_parts
-                    end_frac = (i + 1) / n_parts
-                    self.root.after(0, lambda i=i+1: self.append_info_text(f"[Split MF4] Đang tạo file {base_name}_part{i}.mf4 (tỉ lệ {start_frac:.2f} đến {end_frac:.2f})...\n"))
-                    split_mdf = mdf.cut(start=start_frac, stop=end_frac)
-                    # Tìm tên file không bị trùng
-                    out_file_base = f"{base_name}_part{i+1}.mf4"
-                    out_file = os.path.join(out_dir, out_file_base)
-                    count = 1
-                    while os.path.exists(out_file):
-                        out_file_base = f"{base_name}_part{i+1}_{count}.mf4"
-                        out_file = os.path.join(out_dir, out_file_base)
-                        count += 1
-                    split_mdf.save(out_file)
-                    self.root.after(0, lambda out_file=out_file: self.append_info_text(f"[Split MF4] Đã tạo: {out_file}\n"))
-                self.root.after(0, lambda: self.append_info_text(f"[Split MF4] Hoàn thành! Đã tách thành {n_parts} file (~{target_mb}MB mỗi file) tại: {out_dir}\n"))
-                messagebox.showinfo("Split MF4", f"Đã tách thành {n_parts} file (~{target_mb}MB mỗi file)!\nThư mục: {out_dir}")
-            except Exception as e:
-                self.root.after(0, lambda: self.append_info_text(f"[Split MF4] Lỗi khi tách file: {e}\n"))
-                messagebox.showerror("Split MF4", f"Lỗi khi tách file: {e}")
-        threading.Thread(target=worker, daemon=True).start()
-
-    def open_split_mf4_dialog(self):
-        self.split_mf4_file()
-
     def old_import_action(self):
         from tkinter import messagebox
         runtime_path = self.runtime_var.get().strip()
@@ -2488,6 +2647,14 @@ class MF4ImporterGUI:
                 # Bỏ qua nếu inport có newdatacheck
                 if inport.get('newdatacheck') is not None:
                     debug_log.append(f"[SKIP] inport has newdatacheck: {ET.tostring(inport, encoding='unicode')}")
+                    continue
+                # Bỏ qua nếu inport có init (conflict với old)
+                if inport.get('init') is not None:
+                    debug_log.append(f"[SKIP] inport has init attribute: {ET.tostring(inport, encoding='unicode')}")
+                    continue
+                # Bỏ qua nếu inport đã có old attribute
+                if inport.get('old') is not None:
+                    debug_log.append(f"[SKIP] inport already has old={inport.get('old')}: {ET.tostring(inport, encoding='unicode')}")
                     continue
                 # Bỏ qua nếu outport có doorkeeper modus="sequence_number"
                 doorkeeper = outport.find('doorkeeper')
@@ -2639,6 +2806,970 @@ class MF4ImporterGUI:
                 self.root.after(0, lambda e=e: messagebox.showerror("Lỗi", f"Lỗi khi chạy Missing Signals analysis: {e}"))
         
         threading.Thread(target=worker, daemon=True).start()
+
+    def browse_a2l_file(self):
+        """Browse and select A2L file manually"""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select A2L File",
+            filetypes=[
+                ("A2L files", "*.a2l"),
+                ("All files", "*.*")
+            ]
+        )
+        if file_path:
+            self.a2l_actual_var.set(file_path)
+            self.append_info_text(f"[A2L] Manual selection: {file_path}\n")
+
+    def browse_scom_file(self):
+        """Browse and select SCOM XML file manually"""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Select SCOM XML File",
+            filetypes=[
+                ("XML files", "*.xml"),
+                ("All files", "*.*")
+            ]
+        )
+        if file_path:
+            self.scom_actual_var.set(file_path)
+            self.append_info_text(f"[SCOM] Manual selection: {file_path}\n")
+
+    def validate_scom_and_fix_runtime(self):
+        """Validate that all runtime runnables exist in SCOM and auto-fix if needed"""
+        def worker():
+            try:
+                import xml.etree.ElementTree as ET
+                import shutil
+                
+                runtime_xml = self.runtime_var.get().strip()
+                scom_path = self.scom_actual_var.get().strip()
+                
+                if not runtime_xml or not os.path.isfile(runtime_xml):
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Runtime XML not found!"))
+                    return
+                
+                if not scom_path or not os.path.isfile(scom_path):
+                    self.root.after(0, lambda: messagebox.showerror("Error", "SCOM XML not found!"))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text("[SCOM_VALIDATE] 🔍 Starting SCOM validation...\n"))
+                
+                # Parse SCOM to get available runnables
+                scom_tree = ET.parse(scom_path)
+                scom_root = scom_tree.getroot()
+                
+                scom_runnables = set()
+                # Try both lowercase and uppercase
+                for runnable in scom_root.findall('.//runnable'):
+                    name = runnable.get('name') or runnable.get('id')
+                    if name:
+                        scom_runnables.add(name)
+                for runnable in scom_root.findall('.//Runnable'):
+                    name = runnable.get('name') or runnable.get('id')
+                    if name:
+                        scom_runnables.add(name)
+                
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] Found {len(scom_runnables)} runnables in SCOM\n"))
+                
+                # Parse runtime.xml to get active runnables
+                runtime_tree = ET.parse(runtime_xml)
+                runtime_root = runtime_tree.getroot()
+                
+                runtime_runnables = {}
+                for runnable in runtime_root.findall('.//runnable'):
+                    runnable_id = runnable.get('id')
+                    if runnable_id:
+                        runtime_runnables[runnable_id] = runnable
+                
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] Found {len(runtime_runnables)} runnables in Runtime XML\n"))
+                
+                # Find runnables in runtime but not in SCOM
+                missing = set(runtime_runnables.keys()) - scom_runnables
+                
+                if not missing:
+                    self.root.after(0, lambda: self.append_info_text("[SCOM_VALIDATE] ✅ All runnables are valid!\n"))
+                    self.root.after(0, lambda: messagebox.showinfo("Success", "All runnables in Runtime XML exist in SCOM!"))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] ⚠️ Found {len(missing)} invalid runnables:\n"))
+                for r in sorted(missing):
+                    self.root.after(0, lambda runnable=r: self.append_info_text(f"  ❌ {runnable}\n"))
+                
+                # Ask user for confirmation
+                msg = f"Found {len(missing)} runnables not in SCOM:\n\n"
+                msg += "\n".join(f"• {r}" for r in sorted(list(missing)[:10]))
+                if len(missing) > 10:
+                    msg += f"\n... and {len(missing) - 10} more"
+                msg += "\n\nDo you want to remove them from Runtime XML?"
+                
+                result = messagebox.askyesno("Remove Invalid Runnables?", msg)
+                if not result:
+                    self.root.after(0, lambda: self.append_info_text("[SCOM_VALIDATE] User cancelled removal\n"))
+                    return
+                
+                # Backup runtime.xml
+                backup = runtime_xml + '.backup'
+                shutil.copy2(runtime_xml, backup)
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] 💾 Backup: {backup}\n"))
+                
+                # Remove invalid runnables
+                removed_count = 0
+                for runnable_id in missing:
+                    runnable_elem = runtime_runnables[runnable_id]
+                    parent = None
+                    
+                    # Find parent element
+                    for elem in runtime_root.iter():
+                        if runnable_elem in list(elem):
+                            parent = elem
+                            break
+                    
+                    if parent is not None:
+                        parent.remove(runnable_elem)
+                        removed_count += 1
+                
+                # Save cleaned runtime.xml
+                runtime_tree.write(runtime_xml, encoding='utf-8', xml_declaration=True)
+                
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] ✅ Removed {removed_count} invalid runnables\n"))
+                self.root.after(0, lambda: self.append_info_text(f"[SCOM_VALIDATE] 💾 Updated: {runtime_xml}\n"))
+                self.root.after(0, lambda: messagebox.showinfo("Success", f"Removed {removed_count} invalid runnables from Runtime XML!"))
+                
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.append_info_text(f"[SCOM_VALIDATE] ❌ Error: {err}\n"))
+                self.root.after(0, lambda err=str(e): messagebox.showerror("Error", f"SCOM validation failed: {err}"))
+        
+        threading.Thread(target=worker, daemon=True).start()
+
+    def compare_mapping_tables(self):
+        """Compare two mapping table files (CSV or Excel)"""
+        from compare_mapping_functions import compare_mapping_tables_dialog
+        compare_mapping_tables_dialog(self.root, self.append_info_text, self.set_window_icon)
+
+    def debug_port_connections(self):
+        """Debug port connections in Runtime XML - show inports/outports and detect issues"""
+        def worker():
+            try:
+                from tkinter import messagebox, Toplevel, Listbox, Scrollbar, Text, END
+                
+                runtime_xml = self.runtime_var.get().strip()
+                scom_path = self.scom_actual_var.get().strip()
+                
+                if not runtime_xml or not os.path.isfile(runtime_xml):
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Runtime XML not found!"))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text("[PORT_DEBUG] 🔍 Analyzing port connections...\n"))
+                
+                # Step 1: Parse SCOM to get valid runnables
+                scom_runnables = set()
+                if scom_path and os.path.isfile(scom_path):
+                    self.root.after(0, lambda: self.append_info_text("[PORT_DEBUG] Reading SCOM XML...\n"))
+                    scom_tree = ET.parse(scom_path)
+                    scom_root = scom_tree.getroot()
+                    
+                    # Try both lowercase and uppercase
+                    for runnable in scom_root.findall('.//runnable'):
+                        name = runnable.get('name') or runnable.get('id')
+                        if name:
+                            scom_runnables.add(name)
+                    for runnable in scom_root.findall('.//Runnable'):
+                        name = runnable.get('name') or runnable.get('id')
+                        if name:
+                            scom_runnables.add(name)
+                    
+                    self.root.after(0, lambda: self.append_info_text(f"[PORT_DEBUG] Found {len(scom_runnables)} valid runnables in SCOM\n"))
+                else:
+                    self.root.after(0, lambda: self.append_info_text("[PORT_DEBUG] ⚠️  SCOM not available - cannot validate runnables\n"))
+                
+                # Step 2: Parse Runtime XML
+                tree = ET.parse(runtime_xml)
+                root = tree.getroot()
+                
+                # Collect runnables with their ports
+                runnables_info = {}
+                invalid_runnables = set()  # Use set to avoid duplicates
+                
+                # Try both lowercase and uppercase runnable tags
+                all_runnables = list(root.findall('.//runnable')) + list(root.findall('.//Runnable'))
+                
+                for runnable in all_runnables:
+                    runnable_id = runnable.get('id') or runnable.get('name')
+                    if not runnable_id:
+                        continue
+                    
+                    # Skip if already processed (avoid duplicates from lowercase + uppercase search)
+                    if runnable_id in runnables_info:
+                        continue
+                    
+                    # Check if runnable exists in SCOM
+                    is_valid = True
+                    if scom_runnables:
+                        # Skip DataPlayer and DataRecorder from validation
+                        if runnable_id not in ['DataPlayer', 'DataRecorder']:
+                            is_valid = runnable_id in scom_runnables
+                            if not is_valid:
+                                invalid_runnables.add(runnable_id)  # Use add instead of append
+                    
+                    runnables_info[runnable_id] = {
+                        'task': runnable.get('task', 'N/A'),
+                        'valid': is_valid,
+                        'in_scom': runnable_id in scom_runnables if scom_runnables else None,
+                        'inports': [],
+                        'outports': [],
+                        'inport_connections': [],
+                        'outport_connections': []
+                    }
+                
+                self.root.after(0, lambda: self.append_info_text(f"[PORT_DEBUG] Found {len(runnables_info)} runnables in Runtime XML\n"))
+                if invalid_runnables:
+                    self.root.after(0, lambda: self.append_info_text(f"[PORT_DEBUG] ⚠️  Found {len(invalid_runnables)} invalid runnables (not in SCOM)\n"))
+                
+                # Step 3: Collect connections
+                orphan_connections = []  # Connections referencing non-existent runnables
+                
+                for connection in root.findall('.//connection'):
+                    outport = connection.find('outport')
+                    inport = connection.find('inport')
+                    
+                    if outport is None or inport is None:
+                        continue
+                    
+                    out_runnable = outport.get('runnable')
+                    out_port = outport.get('port')
+                    out_task = outport.get('task', 'N/A')
+                    
+                    in_runnable = inport.get('runnable')
+                    in_port = inport.get('port')
+                    
+                    # Check doorkeeper
+                    doorkeeper = connection.find('doorkeeper')
+                    doorkeeper_mode = doorkeeper.get('modus') if doorkeeper is not None else None
+                    
+                    # Check multibuffer
+                    multibuffer = connection.find('multibuffer')
+                    has_multibuffer = multibuffer is not None
+                    
+                    # Check if connection references non-existent runnables
+                    if out_runnable not in runnables_info or in_runnable not in runnables_info:
+                        orphan_connections.append({
+                            'from': out_runnable,
+                            'from_port': out_port,
+                            'to': in_runnable,
+                            'to_port': in_port,
+                            'from_exists': out_runnable in runnables_info,
+                            'to_exists': in_runnable in runnables_info
+                        })
+                        continue
+                    
+                    # Record outport connection
+                    if out_port not in runnables_info[out_runnable]['outports']:
+                        runnables_info[out_runnable]['outports'].append(out_port)
+                    runnables_info[out_runnable]['outport_connections'].append({
+                        'port': out_port,
+                        'to_runnable': in_runnable,
+                        'to_port': in_port,
+                        'task': out_task,
+                        'doorkeeper': doorkeeper_mode,
+                        'multibuffer': has_multibuffer
+                    })
+                    
+                    # Record inport connection
+                    if in_port not in runnables_info[in_runnable]['inports']:
+                        runnables_info[in_runnable]['inports'].append(in_port)
+                    runnables_info[in_runnable]['inport_connections'].append({
+                        'port': in_port,
+                        'from_runnable': out_runnable,
+                        'from_port': out_port,
+                        'task': out_task,
+                        'doorkeeper': doorkeeper_mode,
+                        'multibuffer': has_multibuffer
+                    })
+                
+                # Step 4: Find issues
+                issues = []
+                orphan_runnables = []
+                missing_inputs = []
+                missing_outputs = []
+                
+                for runnable_id, info in runnables_info.items():
+                    # Skip DataPlayer and DataRecorder
+                    if runnable_id in ['DataPlayer', 'DataRecorder']:
+                        continue
+                    
+                    # Check orphan runnables (no connections at all)
+                    if not info['inport_connections'] and not info['outport_connections']:
+                        orphan_runnables.append(runnable_id)
+                    
+                    # Check missing inputs (no inport connections)
+                    if not info['inport_connections']:
+                        missing_inputs.append(runnable_id)
+                    
+                    # Check missing outputs (no outport connections)
+                    if not info['outport_connections']:
+                        missing_outputs.append(runnable_id)
+                
+                if orphan_connections:
+                    self.root.after(0, lambda: self.append_info_text(f"[PORT_DEBUG] ⚠️  Found {len(orphan_connections)} orphan connections (reference non-existent runnables)\n"))
+                
+                # Step 5: Display results in a new window
+                def show_results():
+                    top = Toplevel(self.root)
+                    self.set_window_icon(top)
+                    top.title("Port Debug Results")
+                    top.geometry("900x700")
+                    
+                    # Create notebook-like tabs
+                    import tkinter.ttk as ttk
+                    notebook = ttk.Notebook(top)
+                    notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+                    
+                    # Tab 1: Summary
+                    summary_frame = tk.Frame(notebook)
+                    notebook.add(summary_frame, text="Summary")
+                    
+                    summary_text = Text(summary_frame, wrap=tk.WORD, font=("Consolas", 10))
+                    summary_scroll = Scrollbar(summary_frame, command=summary_text.yview)
+                    summary_text.config(yscrollcommand=summary_scroll.set)
+                    summary_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+                    summary_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    
+                    summary = f"""
+PORT DEBUG SUMMARY
+{'='*60}
+
+SCOM Validation: {'✅ SCOM Available' if scom_runnables else '⚠️  SCOM Not Available'}
+Valid Runnables in SCOM: {len(scom_runnables) if scom_runnables else 'N/A'}
+
+Runtime Analysis:
+{'='*60}
+Total Runnables in Runtime: {len(runnables_info)}
+Invalid Runnables (not in SCOM): {len(invalid_runnables)}
+Total Connections: {sum(len(info['inport_connections']) for info in runnables_info.values())}
+Orphan Connections (bad references): {len(orphan_connections)}
+
+💡 NOTE:
+Connections can be:
+  • DataPlayer → Runnable (from MF4 file)
+  • Runnable → Runnable (internal communication/calculated data)
+  • Runnable → DataRecorder (output to MF4)
+
+PORT ISSUES:
+{'='*60}
+Orphan Runnables (no connections): {len(orphan_runnables)}
+Missing Input Runnables: {len(missing_inputs)}
+Missing Output Runnables: {len(missing_outputs)}
+
+"""
+                    
+                    if invalid_runnables:
+                        summary += "\n❌ INVALID RUNNABLES (Not in SCOM):\n"
+                        for r in invalid_runnables[:20]:
+                            summary += f"  • {r}\n"
+                        if len(invalid_runnables) > 20:
+                            summary += f"  ... and {len(invalid_runnables) - 20} more\n"
+                    
+                    if orphan_connections:
+                        summary += "\n⚠️  ORPHAN CONNECTIONS (Reference non-existent runnables):\n"
+                        for conn in orphan_connections[:20]:
+                            from_status = '✅' if conn['from_exists'] else '❌'
+                            to_status = '✅' if conn['to_exists'] else '❌'
+                            summary += f"  {from_status} {conn['from']}.{conn['from_port']} → {to_status} {conn['to']}.{conn['to_port']}\n"
+                        if len(orphan_connections) > 20:
+                            summary += f"  ... and {len(orphan_connections) - 20} more\n"
+                    
+                    if orphan_runnables:
+                        summary += "\n⚠️  ORPHAN RUNNABLES (No connections):\n"
+                        for r in orphan_runnables[:20]:
+                            valid_status = '✅' if runnables_info[r]['valid'] else '❌'
+                            summary += f"  {valid_status} {r}\n"
+                        if len(orphan_runnables) > 20:
+                            summary += f"  ... and {len(orphan_runnables) - 20} more\n"
+                    
+                    if missing_inputs:
+                        summary += "\n⚠️  MISSING INPUTS (No inport connections):\n"
+                        for r in missing_inputs[:20]:
+                            valid_status = '✅' if runnables_info[r]['valid'] else '❌'
+                            summary += f"  {valid_status} {r}\n"
+                        if len(missing_inputs) > 20:
+                            summary += f"  ... and {len(missing_inputs) - 20} more\n"
+                    
+                    if missing_outputs:
+                        summary += "\n⚠️  MISSING OUTPUTS (No outport connections):\n"
+                        for r in missing_outputs[:20]:
+                            valid_status = '✅' if runnables_info[r]['valid'] else '❌'
+                            summary += f"  {valid_status} {r}\n"
+                        if len(missing_outputs) > 20:
+                            summary += f"  ... and {len(missing_outputs) - 20} more\n"
+                    
+                    summary_text.insert(END, summary)
+                    summary_text.config(state=tk.DISABLED)
+                    
+                    # Tab 2: Runnable Details
+                    details_frame = tk.Frame(notebook)
+                    notebook.add(details_frame, text="Runnable Details")
+                    
+                    # Left: Runnable list
+                    left_frame = tk.Frame(details_frame)
+                    left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=5, pady=5)
+                    
+                    tk.Label(left_frame, text="Select Runnable:", font=("Arial", 10, "bold")).pack()
+                    
+                    runnable_listbox = Listbox(left_frame, width=50, height=30)
+                    runnable_scroll = Scrollbar(left_frame, command=runnable_listbox.yview)
+                    runnable_listbox.config(yscrollcommand=runnable_scroll.set)
+                    runnable_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+                    runnable_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    
+                    for runnable_id in sorted(runnables_info.keys()):
+                        runnable_listbox.insert(END, runnable_id)
+                    
+                    # Right: Runnable info
+                    right_frame = tk.Frame(details_frame)
+                    right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+                    
+                    info_text = Text(right_frame, wrap=tk.WORD, font=("Consolas", 9))
+                    info_scroll = Scrollbar(right_frame, command=info_text.yview)
+                    info_text.config(yscrollcommand=info_scroll.set)
+                    info_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+                    info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    
+                    def on_runnable_select(event):
+                        selection = runnable_listbox.curselection()
+                        if not selection:
+                            return
+                        
+                        runnable_id = runnable_listbox.get(selection[0])
+                        info = runnables_info[runnable_id]
+                        
+                        info_text.config(state=tk.NORMAL)
+                        info_text.delete(1.0, END)
+                        
+                        # SCOM validation status
+                        scom_status = "N/A (SCOM not loaded)"
+                        if scom_runnables:
+                            if runnable_id in ['DataPlayer', 'DataRecorder']:
+                                scom_status = "✅ System runnable (not in SCOM)"
+                            elif info['valid']:
+                                scom_status = "✅ Valid (exists in SCOM)"
+                            else:
+                                scom_status = "❌ Invalid (NOT in SCOM)"
+                        
+                        detail = f"""
+RUNNABLE: {runnable_id}
+{'='*60}
+Task: {info['task']}
+SCOM Status: {scom_status}
+
+INPORTS ({len(info['inports'])}):
+{'─'*60}
+"""
+                        if info['inport_connections']:
+                            for conn in info['inport_connections']:
+                                detail += f"""
+  Port: {conn['port']}
+  From: {conn['from_runnable']}
+  From Port: {conn['from_port']}
+  Task: {conn['task']}
+  Doorkeeper: {conn['doorkeeper'] or 'None'}
+  Multibuffer: {'Yes' if conn['multibuffer'] else 'No'}
+"""
+                        else:
+                            detail += "  ⚠️  NO INPUT CONNECTIONS\n"
+                        
+                        detail += f"""
+OUTPORTS ({len(info['outports'])}):
+{'─'*60}
+"""
+                        if info['outport_connections']:
+                            for conn in info['outport_connections']:
+                                detail += f"""
+  Port: {conn['port']}
+  To: {conn['to_runnable']}
+  To Port: {conn['to_port']}
+  Task: {conn['task']}
+  Doorkeeper: {conn['doorkeeper'] or 'None'}
+  Multibuffer: {'Yes' if conn['multibuffer'] else 'No'}
+"""
+                        else:
+                            detail += "  ⚠️  NO OUTPUT CONNECTIONS\n"
+                        
+                        info_text.insert(END, detail)
+                        info_text.config(state=tk.DISABLED)
+                    
+                    runnable_listbox.bind('<<ListboxSelect>>', on_runnable_select)
+                    
+                    # Tab 3: Missing Connections Recommendations
+                    missing_frame = tk.Frame(notebook)
+                    notebook.add(missing_frame, text="Missing Connections")
+                    
+                    missing_text = Text(missing_frame, wrap=tk.WORD, font=("Consolas", 9))
+                    missing_scroll = Scrollbar(missing_frame, command=missing_text.yview)
+                    missing_text.config(yscrollcommand=missing_scroll.set)
+                    missing_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+                    missing_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    
+                    missing_report = """
+MISSING CONNECTIONS ANALYSIS
+{'='*70}
+
+This report shows runnables that need connections to work properly.
+
+"""
+                    
+                    # Analyze missing inputs
+                    if missing_inputs:
+                        missing_report += f"""
+⚠️  RUNNABLES WITH NO INPUT ({len(missing_inputs)}):
+{'─'*70}
+These runnables have NO inport connections. They need data from:
+  • DataPlayer (from MF4 file)
+  • Other runnables (calculated data)
+
+"""
+                        for runnable_id in sorted(missing_inputs):
+                            if runnable_id in ['DataPlayer', 'DataRecorder']:
+                                continue
+                            
+                            info = runnables_info[runnable_id]
+                            scom_status = '✅' if info['valid'] else '❌ NOT IN SCOM'
+                            missing_report += f"""
+Runnable: {runnable_id}
+Status: {scom_status}
+Task: {info['task']}
+Problem: No input connections
+Recommendation:
+  → Check SCOM for inport definitions
+  → Add connection from DataPlayer if data comes from MF4
+  → Add connection from another runnable if data is calculated
+  → Example:
+    <connection>
+      <outport runnable="DataPlayer" port="signal_name"/>
+      <inport runnable="{runnable_id}" port="port_name_in"/>
+    </connection>
+
+"""
+                    
+                    # Analyze missing outputs
+                    if missing_outputs:
+                        missing_report += f"""
+⚠️  RUNNABLES WITH NO OUTPUT ({len(missing_outputs)}):
+{'─'*70}
+These runnables have NO outport connections. Their data goes nowhere:
+
+"""
+                        for runnable_id in sorted(missing_outputs):
+                            if runnable_id in ['DataPlayer', 'DataRecorder']:
+                                continue
+                            
+                            info = runnables_info[runnable_id]
+                            scom_status = '✅' if info['valid'] else '❌ NOT IN SCOM'
+                            missing_report += f"""
+Runnable: {runnable_id}
+Status: {scom_status}
+Task: {info['task']}
+Problem: No output connections
+Recommendation:
+  → Check SCOM for outport definitions
+  → Add connection to DataRecorder if data should be in output MF4
+  → Add connection to another runnable if data is needed by others
+  → Example:
+    <connection>
+      <outport runnable="{runnable_id}" port="port_name_out"/>
+      <inport runnable="DataRecorder" port="output_signal_name"/>
+    </connection>
+
+"""
+                    
+                    # Analyze orphan runnables
+                    if orphan_runnables:
+                        missing_report += f"""
+❌ ORPHAN RUNNABLES ({len(orphan_runnables)}):
+{'─'*70}
+These runnables have NO connections at all (no input and no output):
+
+"""
+                        for runnable_id in sorted(orphan_runnables):
+                            if runnable_id in ['DataPlayer', 'DataRecorder']:
+                                continue
+                            
+                            info = runnables_info[runnable_id]
+                            scom_status = '✅' if info['valid'] else '❌ NOT IN SCOM'
+                            missing_report += f"""
+Runnable: {runnable_id}
+Status: {scom_status}
+Task: {info['task']}
+Problem: Completely isolated (no input, no output)
+Recommendation:
+  → If not needed: Remove from runtime.xml
+  → If needed: Add both input and output connections
+  → Check if runnable exists in SCOM
+
+"""
+                    
+                    # Analyze orphan connections
+                    if orphan_connections:
+                        missing_report += f"""
+⚠️  ORPHAN CONNECTIONS ({len(orphan_connections)}):
+{'─'*70}
+These connections reference non-existent runnables:
+
+"""
+                        for conn in sorted(orphan_connections, key=lambda x: x['from']):
+                            from_status = '✅ EXISTS' if conn['from_exists'] else '❌ MISSING'
+                            to_status = '✅ EXISTS' if conn['to_exists'] else '❌ MISSING'
+                            missing_report += f"""
+Connection: {conn['from']}.{conn['from_port']} → {conn['to']}.{conn['to_port']}
+From runnable: {from_status}
+To runnable: {to_status}
+Problem: One or both runnables don't exist in runtime
+Recommendation:
+  → Remove this connection from runtime.xml
+  → Or add the missing runnable(s) to runtime
+
+"""
+                    
+                    missing_text.insert(END, missing_report)
+                    missing_text.config(state=tk.DISABLED)
+                    
+                    # Close button
+                    tk.Button(top, text="Close", command=top.destroy, width=15).pack(pady=10)
+                
+                self.root.after(0, show_results)
+                self.root.after(0, lambda: self.append_info_text(f"[PORT_DEBUG] ✅ Analysis complete. Found {len(issues)} issues.\n"))
+                
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.append_info_text(f"[PORT_DEBUG] ❌ Error: {err}\n"))
+                self.root.after(0, lambda err=str(e): messagebox.showerror("Error", f"Port debug failed: {err}"))
+        
+        threading.Thread(target=worker, daemon=True).start()
+
+    def perform_port_search(self, pattern):
+        """Perform the actual port search with regex pattern"""
+        def worker():
+            try:
+                import re
+                from tkinter import messagebox, Toplevel, Listbox, Scrollbar, Text, END, LEFT, RIGHT, Y, BOTH, WORD, Entry, Label, Button, Frame, VERTICAL
+                
+                runtime_xml = self.runtime_var.get().strip()
+                
+                if not runtime_xml or not os.path.isfile(runtime_xml):
+                    self.root.after(0, lambda: messagebox.showerror("Error", "Runtime XML not found!"))
+                    return
+                
+                self.root.after(0, lambda: self.append_info_text(f"[PORT_SEARCH] 🔍 Searching with pattern: {pattern}\n"))
+                
+                # Compile regex pattern
+                try:
+                    regex = re.compile(pattern, re.IGNORECASE)
+                except re.error as e:
+                    self.root.after(0, lambda err=str(e): messagebox.showerror("Regex Error", f"Invalid regex pattern: {err}"))
+                    self.root.after(0, lambda: self.append_info_text(f"[PORT_SEARCH] ❌ Invalid regex: {pattern}\n"))
+                    return
+                
+                # Parse Runtime XML
+                tree = ET.parse(runtime_xml)
+                root = tree.getroot()
+                
+                # Search results
+                found_runnables = {}  # runnable_name -> {inports: [], outports: [], connections: []}
+                
+                # Find all runnables
+                for runnable in root.findall('.//runnable'):
+                    runnable_name = runnable.get('name') or runnable.get('id')
+                    if not runnable_name:
+                        continue
+                    
+                    task_elem = runnable.find('..')
+                    task_name = task_elem.get('name') or task_elem.get('id') if task_elem is not None else 'Unknown'
+                    
+                    # Check runnable name
+                    if regex.search(runnable_name):
+                        if runnable_name not in found_runnables:
+                            found_runnables[runnable_name] = {
+                                'task': task_name,
+                                'inports': [],
+                                'outports': [],
+                                'connections': [],
+                                'matched': 'runnable_name'
+                            }
+                    
+                    # Check inports
+                    for inport in runnable.findall('.//inport'):
+                        port_name = inport.get('name') or inport.get('id')
+                        if port_name and regex.search(port_name):
+                            if runnable_name not in found_runnables:
+                                found_runnables[runnable_name] = {
+                                    'task': task_name,
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'port'
+                                }
+                            found_runnables[runnable_name]['inports'].append(port_name)
+                    
+                    # Check outports
+                    for outport in runnable.findall('.//outport'):
+                        port_name = outport.get('name') or outport.get('id')
+                        if port_name and regex.search(port_name):
+                            if runnable_name not in found_runnables:
+                                found_runnables[runnable_name] = {
+                                    'task': task_name,
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'port'
+                                }
+                            found_runnables[runnable_name]['outports'].append(port_name)
+                
+                # Search in connections
+                for connection in root.findall('.//connection'):
+                    from_runnable = connection.get('from')
+                    to_runnable = connection.get('to')
+                    from_port = connection.get('fromPort')
+                    to_port = connection.get('toPort')
+                    
+                    matched = False
+                    match_info = []
+                    
+                    if from_runnable and regex.search(from_runnable):
+                        matched = True
+                        match_info.append(f"from_runnable: {from_runnable}")
+                    if to_runnable and regex.search(to_runnable):
+                        matched = True
+                        match_info.append(f"to_runnable: {to_runnable}")
+                    if from_port and regex.search(from_port):
+                        matched = True
+                        match_info.append(f"from_port: {from_port}")
+                    if to_port and regex.search(to_port):
+                        matched = True
+                        match_info.append(f"to_port: {to_port}")
+                    
+                    if matched:
+                        conn_info = {
+                            'from': from_runnable,
+                            'to': to_runnable,
+                            'from_port': from_port,
+                            'to_port': to_port,
+                            'match_info': ', '.join(match_info)
+                        }
+                        
+                        # Add to both runnables if they exist
+                        if from_runnable:
+                            if from_runnable not in found_runnables:
+                                found_runnables[from_runnable] = {
+                                    'task': 'Unknown',
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'connection'
+                                }
+                            found_runnables[from_runnable]['connections'].append(conn_info)
+                        
+                        if to_runnable and to_runnable != from_runnable:
+                            if to_runnable not in found_runnables:
+                                found_runnables[to_runnable] = {
+                                    'task': 'Unknown',
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'connection'
+                                }
+                            found_runnables[to_runnable]['connections'].append(conn_info)
+                
+                # Also search for Runnable (uppercase)
+                for runnable in root.findall('.//Runnable'):
+                    runnable_name = runnable.get('name') or runnable.get('id')
+                    if not runnable_name:
+                        continue
+                    
+                    task_elem = runnable.find('..')
+                    task_name = task_elem.get('name') or task_elem.get('id') if task_elem is not None else 'Unknown'
+                    
+                    if regex.search(runnable_name):
+                        if runnable_name not in found_runnables:
+                            found_runnables[runnable_name] = {
+                                'task': task_name,
+                                'inports': [],
+                                'outports': [],
+                                'connections': [],
+                                'matched': 'runnable_name'
+                            }
+                    
+                    # Check inports
+                    for inport in runnable.findall('.//inport'):
+                        port_name = inport.get('name') or inport.get('id')
+                        if port_name and regex.search(port_name):
+                            if runnable_name not in found_runnables:
+                                found_runnables[runnable_name] = {
+                                    'task': task_name,
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'port'
+                                }
+                            found_runnables[runnable_name]['inports'].append(port_name)
+                    
+                    # Check outports
+                    for outport in runnable.findall('.//outport'):
+                        port_name = outport.get('name') or outport.get('id')
+                        if port_name and regex.search(port_name):
+                            if runnable_name not in found_runnables:
+                                found_runnables[runnable_name] = {
+                                    'task': task_name,
+                                    'inports': [],
+                                    'outports': [],
+                                    'connections': [],
+                                    'matched': 'port'
+                                }
+                            found_runnables[runnable_name]['outports'].append(port_name)
+                
+                self.root.after(0, lambda: self.append_info_text(f"[PORT_SEARCH] Found {len(found_runnables)} runnables matching pattern\n"))
+                
+                # Display results
+                def show_results():
+                    if not found_runnables:
+                        messagebox.showinfo("Search Results", f"No matches found for pattern: {pattern}")
+                        return
+                    
+                    top = Toplevel(self.root)
+                    self.set_window_icon(top)
+                    top.title(f"🔍 Search Results: {pattern}")
+                    top.geometry("900x600")
+                    
+                    # Header
+                    header = Frame(top, bg='#9C27B0', pady=10)
+                    header.pack(fill='x')
+                    Label(header, text=f"Found {len(found_runnables)} runnables matching: {pattern}", 
+                          bg='#9C27B0', fg='white', font=('Arial', 12, 'bold')).pack()
+                    
+                    # Main container
+                    main_container = Frame(top)
+                    main_container.pack(fill=BOTH, expand=True, padx=10, pady=10)
+                    
+                    # Left: Runnable list
+                    left_frame = Frame(main_container)
+                    left_frame.pack(side=LEFT, fill=BOTH, expand=False, padx=(0, 5))
+                    
+                    Label(left_frame, text="Matched Runnables:", font=('Arial', 10, 'bold')).pack(anchor='w')
+                    
+                    list_frame = Frame(left_frame)
+                    list_frame.pack(fill=BOTH, expand=True)
+                    
+                    scrollbar = Scrollbar(list_frame, orient=VERTICAL)
+                    runnable_list = Listbox(list_frame, yscrollcommand=scrollbar.set, 
+                                           font=('Consolas', 9), width=30, height=20)
+                    scrollbar.config(command=runnable_list.yview)
+                    scrollbar.pack(side=RIGHT, fill=Y)
+                    runnable_list.pack(side=LEFT, fill=BOTH, expand=True)
+                    
+                    # Populate list
+                    sorted_runnables = sorted(found_runnables.keys())
+                    for runnable in sorted_runnables:
+                        runnable_list.insert(END, runnable)
+                    
+                    # Right: Details
+                    right_frame = Frame(main_container)
+                    right_frame.pack(side=RIGHT, fill=BOTH, expand=True)
+                    
+                    Label(right_frame, text="Details:", font=('Arial', 10, 'bold')).pack(anchor='w')
+                    
+                    detail_frame = Frame(right_frame)
+                    detail_frame.pack(fill=BOTH, expand=True)
+                    
+                    detail_scroll = Scrollbar(detail_frame, orient=VERTICAL)
+                    detail_text = Text(detail_frame, yscrollcommand=detail_scroll.set, 
+                                      font=('Consolas', 9), wrap=WORD, bg='#f5f5f5')
+                    detail_scroll.config(command=detail_text.yview)
+                    detail_scroll.pack(side=RIGHT, fill=Y)
+                    detail_text.pack(side=LEFT, fill=BOTH, expand=True)
+                    
+                    def on_select(event):
+                        selection = runnable_list.curselection()
+                        if not selection:
+                            return
+                        
+                        runnable_name = runnable_list.get(selection[0])
+                        info = found_runnables[runnable_name]
+                        
+                        detail_text.config(state='normal')
+                        detail_text.delete(1.0, END)
+                        
+                        report = f"""
+╔═══════════════════════════════════════════════════════════════════╗
+  RUNNABLE: {runnable_name}
+╚═══════════════════════════════════════════════════════════════════╝
+
+Task: {info['task']}
+Match Type: {info['matched'].upper()}
+
+"""
+                        
+                        if info['inports']:
+                            report += f"""
+📥 INPORTS ({len(info['inports'])}):
+{'─'*70}
+"""
+                            for port in sorted(set(info['inports'])):
+                                highlight = '🔍 MATCH' if regex.search(port) else ''
+                                report += f"  • {port} {highlight}\n"
+                        else:
+                            report += "\n📥 INPORTS: None\n"
+                        
+                        if info['outports']:
+                            report += f"""
+📤 OUTPORTS ({len(info['outports'])}):
+{'─'*70}
+"""
+                            for port in sorted(set(info['outports'])):
+                                highlight = '🔍 MATCH' if regex.search(port) else ''
+                                report += f"  • {port} {highlight}\n"
+                        else:
+                            report += "\n📤 OUTPORTS: None\n"
+                        
+                        if info['connections']:
+                            report += f"""
+🔗 CONNECTIONS ({len(info['connections'])}):
+{'─'*70}
+"""
+                            seen_connections = set()
+                            for conn in info['connections']:
+                                conn_key = f"{conn['from']}.{conn['from_port']}→{conn['to']}.{conn['to_port']}"
+                                if conn_key in seen_connections:
+                                    continue
+                                seen_connections.add(conn_key)
+                                
+                                report += f"""
+  From: {conn['from']}.{conn['from_port']}
+  To: {conn['to']}.{conn['to_port']}
+  Matched: {conn['match_info']}
+  {'─'*68}
+"""
+                        else:
+                            report += "\n🔗 CONNECTIONS: None\n"
+                        
+                        detail_text.insert(END, report)
+                        detail_text.config(state='disabled')
+                    
+                    runnable_list.bind('<<ListboxSelect>>', on_select)
+                    
+                    # Select first item by default
+                    if sorted_runnables:
+                        runnable_list.selection_set(0)
+                        on_select(None)
+                    
+                    # Close button
+                    Button(top, text="Close", command=top.destroy, width=15).pack(pady=10)
+                
+                self.root.after(0, show_results)
+                
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.append_info_text(f"[PORT_SEARCH] ❌ Error: {err}\n"))
+                self.root.after(0, lambda err=str(e): messagebox.showerror("Error", f"Port search failed: {err}"))
+        
+        threading.Thread(target=worker, daemon=True).start()
+
 
 
 def run_gui():
